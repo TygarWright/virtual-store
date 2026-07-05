@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from flask import (
     Flask, render_template, request, redirect, url_for, session,
     flash, jsonify, abort
@@ -17,6 +19,17 @@ app.config["SECRET_KEY"] = config.SECRET_KEY
 app.config["MAX_CONTENT_LENGTH"] = config.MAX_IMAGE_SIZE_MB * 1024 * 1024 * 6  # a few images per request
 
 db.init_db()
+
+
+@app.after_request
+def set_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers.setdefault(
+        "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
+    )
+    return response
 
 
 @app.context_processor
@@ -42,12 +55,21 @@ def home():
     ).fetchall()
 
     category = (request.args.get("category") or "").strip()
+    query = (request.args.get("q") or "").strip()
     categories = [
         r["category"] for r in conn.execute(
             "SELECT DISTINCT category FROM products WHERE active = 1 AND category != '' ORDER BY category ASC"
         ).fetchall()
     ]
-    if category:
+    if query:
+        like = f"%{query}%"
+        products = conn.execute(
+            """SELECT * FROM products WHERE active = 1
+               AND (name LIKE ? OR short_description LIKE ? OR category LIKE ?)
+               ORDER BY position ASC, id DESC""",
+            (like, like, like),
+        ).fetchall()
+    elif category:
         products = conn.execute(
             "SELECT * FROM products WHERE active = 1 AND category = ? ORDER BY position ASC, id DESC",
             (category,),
@@ -72,11 +94,16 @@ def home():
         "SELECT * FROM faqs WHERE visible = 1 ORDER BY position ASC"
     ).fetchall()
     conn.close()
+
+    cutoff = (datetime.utcnow() - timedelta(days=14)).isoformat()
+    new_product_ids = {p["id"] for p in products if p["created_at"] and p["created_at"] >= cutoff}
+
     return render_template(
         "index.html", settings=settings, sections=sections,
         products=products, product_images=product_images,
         categories=categories, active_category=category,
-        testimonials=testimonials, faqs=faqs,
+        testimonials=testimonials, faqs=faqs, search_query=query,
+        new_product_ids=new_product_ids,
     )
 
 
@@ -94,11 +121,37 @@ def product_detail(slug):
         "SELECT filename FROM product_images WHERE product_id = ? ORDER BY position ASC",
         (product["id"],),
     ).fetchall()
+
+    related = []
+    if product["category"]:
+        related = conn.execute(
+            """SELECT * FROM products WHERE active = 1 AND category = ? AND id != ?
+               ORDER BY position ASC, id DESC LIMIT 4""",
+            (product["category"], product["id"]),
+        ).fetchall()
+    if len(related) < 4:
+        existing_ids = [r["id"] for r in related] + [product["id"]]
+        placeholders = ",".join("?" * len(existing_ids))
+        related += conn.execute(
+            f"""SELECT * FROM products WHERE active = 1 AND id NOT IN ({placeholders})
+                ORDER BY id DESC LIMIT ?""",
+            (*existing_ids, 4 - len(related)),
+        ).fetchall()
+
+    related_images = {}
+    for r in related:
+        img = conn.execute(
+            "SELECT filename FROM product_images WHERE product_id = ? ORDER BY position ASC LIMIT 1",
+            (r["id"],),
+        ).fetchone()
+        related_images[r["id"]] = img["filename"] if img else None
+
     conn.close()
     return render_template(
         "product.html", settings=settings, product=product,
         images=[i["filename"] for i in images],
         razorpay_key=config.RAZORPAY_KEY_ID,
+        related=related, related_images=related_images,
     )
 
 
@@ -315,6 +368,17 @@ def newsletter_subscribe():
         flash("You're already on the list — thank you!", "success")
     conn.close()
     return redirect(url_for("home") + "#newsletter")
+
+
+@app.route("/robots.txt")
+def robots():
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /admin/",
+        f"Sitemap: {url_for('sitemap', _external=True)}",
+    ]
+    return "\n".join(lines), 200, {"Content-Type": "text/plain"}
 
 
 @app.route("/sitemap.xml")

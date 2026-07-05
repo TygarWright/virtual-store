@@ -1,13 +1,42 @@
 {% extends "base.html" %}
 {% block title %}{{ product.name }} — {{ settings.site_name }}{% endblock %}
 {% block og_title %}{{ product.name }} — {{ settings.site_name }}{% endblock %}
+{% block og_image %}{% if images %}<meta property="og:image" content="{{ url_for('static', filename='uploads/' ~ images[0], _external=True) }}">{% endif %}{% endblock %}
+{% block head %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  "name": {{ product.name|tojson }},
+  "description": {{ product.short_description|tojson }},
+  {% if images %}"image": [{{ url_for('static', filename='uploads/' ~ images[0], _external=True)|tojson }}],{% endif %}
+  "offers": {
+    "@type": "Offer",
+    "priceCurrency": "INR",
+    "price": {{ product.price|tojson }},
+    "availability": "https://schema.org/InStock",
+    "url": {{ request.url|tojson }}
+  }
+}
+</script>
+{% endblock %}
 {% block content %}
 <section class="section">
+  <div class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <a href="{{ url_for('home') }}">Home</a>
+      <span>/</span>
+      <a href="{{ url_for('home') }}#products">Shop</a>
+      {% if product.category %}<span>/</span><a href="{{ url_for('home', category=product.category) }}#products">{{ product.category }}</a>{% endif %}
+      <span>/</span>
+      <span aria-current="page">{{ product.name }}</span>
+    </nav>
+  </div>
   <div class="container product-detail">
     <div class="product-gallery reveal">
       <div class="product-gallery__main">
         {% if images %}
-          <img id="mainImage" src="{{ url_for('static', filename='uploads/' ~ images[0]) }}" alt="{{ product.name }}">
+          <img id="mainImage" src="{{ url_for('static', filename='uploads/' ~ images[0]) }}" alt="{{ product.name }}" width="600" height="750">
         {% else %}
           <div class="card__placeholder" style="height:100%;">{{ product.name[0]|upper }}</div>
         {% endif %}
@@ -17,6 +46,8 @@
         {% for img in images %}
           <img src="{{ url_for('static', filename='uploads/' ~ img) }}"
                class="{{ 'active' if loop.first else '' }}"
+               loading="lazy" width="64" height="80"
+               alt="{{ product.name }} — view {{ loop.index }}"
                onclick="swapGalleryImage(this.src, this)">
         {% endfor %}
       </div>
@@ -66,9 +97,51 @@
           you'll be able to track its status any time.
         </p>
       </div>
+
+      <div class="trust-strip">
+        <div class="trust-strip__item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="10" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          Secure Razorpay checkout
+        </div>
+        <div class="trust-strip__item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 6L9 17l-5-5"></path></svg>
+          Personally reviewed before delivery
+        </div>
+        <div class="trust-strip__item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
+          Track your order any time
+        </div>
+      </div>
     </div>
   </div>
+
+  {% if related %}
+  <div class="container related-products reveal">
+    <h3>You May Also Like</h3>
+    <div class="grid">
+      {% for r in related %}
+      <a class="card" href="{{ url_for('product_detail', slug=r.slug) }}">
+        <div class="card__image">
+          {% if related_images[r.id] %}
+            <img src="{{ url_for('static', filename='uploads/' ~ related_images[r.id]) }}" alt="{{ r.name }}" loading="lazy" width="400" height="500">
+          {% else %}
+            <div class="card__placeholder">{{ r.name[0]|upper }}</div>
+          {% endif %}
+        </div>
+        {% if r.category %}<div class="card__category">{{ r.category }}</div>{% endif %}
+        <div class="card__title">{{ r.name }}</div>
+        <div class="card__price">{{ settings.currency_symbol }}{{ "{:,}".format(r.price) }}</div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
 </section>
+
+<div class="mobile-buy-bar">
+  <span class="mobile-buy-bar__price">{{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}</span>
+  <button class="btn" onclick="document.getElementById('buyerName').scrollIntoView({behavior:'smooth', block:'center'}); document.getElementById('buyerName').focus();">Buy Now</button>
+</div>
 
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script>const RAZORPAY_KEY = "{{ razorpay_key }}";</script>

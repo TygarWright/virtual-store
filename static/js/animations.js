@@ -100,6 +100,23 @@
     });
   }
 
+  // ---------- Mobile hamburger menu ----------
+  var navToggle = document.getElementById("navToggle");
+  var mobileMenu = document.getElementById("mobileMenu");
+  if (navToggle && mobileMenu) {
+    navToggle.addEventListener("click", function () {
+      var isOpen = mobileMenu.classList.toggle("open");
+      navToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      navToggle.setAttribute("aria-label", isOpen ? "Close menu" : "Open menu");
+    });
+    mobileMenu.querySelectorAll("a").forEach(function (link) {
+      link.addEventListener("click", function () {
+        mobileMenu.classList.remove("open");
+        navToggle.setAttribute("aria-expanded", "false");
+      });
+    });
+  }
+
   // ---------- Product gallery crossfade ----------
   window.swapGalleryImage = function (src, thumbEl) {
     var main = document.getElementById("mainImage");

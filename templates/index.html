@@ -36,10 +36,10 @@
   <div class="container">
     <div class="section-head reveal">
       <span class="eyebrow">The Catalogue</span>
-      <h2>Our Products</h2>
+      <h2>{% if search_query %}Results for &ldquo;{{ search_query }}&rdquo;{% else %}Our Products{% endif %}</h2>
     </div>
 
-    {% if categories %}
+    {% if categories and not search_query %}
     <div class="filter-tabs reveal">
       <a href="{{ url_for('home') }}#products" class="filter-tab {{ 'active' if not active_category }}">All</a>
       {% for c in categories %}
@@ -53,8 +53,9 @@
       {% for p in products %}
       <a class="card reveal" style="--i: {{ loop.index0 }};" href="{{ url_for('product_detail', slug=p.slug) }}">
         <div class="card__image">
+          {% if p.id in new_product_ids %}<span class="card__badge">New</span>{% endif %}
           {% if product_images[p.id] %}
-            <img src="{{ url_for('static', filename='uploads/' ~ product_images[p.id]) }}" alt="{{ p.name }}">
+            <img src="{{ url_for('static', filename='uploads/' ~ product_images[p.id]) }}" alt="{{ p.name }}" loading="lazy" width="400" height="500">
           {% else %}
             <div class="card__placeholder">{{ p.name[0]|upper }}</div>
           {% endif %}
@@ -67,7 +68,8 @@
     </div>
     {% else %}
     <div class="empty-state">
-      {% if active_category %}No products in "{{ active_category }}" right now.
+      {% if search_query %}No products match &ldquo;{{ search_query }}&rdquo;. Try a different search, or <a href="{{ url_for('home') }}#products" style="text-decoration:underline;">browse everything</a>.
+      {% elif active_category %}No products in "{{ active_category }}" right now.
       {% else %}Nothing here yet — check back soon.{% endif %}
     </div>
     {% endif %}
