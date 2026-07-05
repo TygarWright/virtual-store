@@ -1,0 +1,62 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ 'Edit Product' if product else 'New Product' }}{% endblock %}
+{% block content %}
+<div class="admin-topbar">
+  <h1>{{ 'Edit Product' if product else 'New Product' }}</h1>
+  <a href="{{ url_for('admin_products') }}" class="btn btn--outline btn--sm">← Back to Products</a>
+</div>
+
+<form method="POST" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="card-box">
+    <div class="field">
+      <label>Product Name</label>
+      <input type="text" name="name" value="{{ product.name if product else '' }}" required>
+    </div>
+    <div class="field">
+      <label>Price (in ₹, whole rupees)</label>
+      <input type="number" name="price" min="0" step="1" value="{{ product.price if product else '' }}" required>
+    </div>
+    <div class="field">
+      <label>Short Description</label>
+      <input type="text" name="short_description" value="{{ product.short_description if product else '' }}">
+      <small>One line, shown just under the price.</small>
+    </div>
+    <div class="field">
+      <label>Full Description</label>
+      <textarea name="description" style="min-height:160px;">{{ product.description if product else '' }}</textarea>
+    </div>
+    <div class="field field--checkbox">
+      <input type="checkbox" name="active" id="active" {{ 'checked' if (product is none) or product.active }}>
+      <label for="active" style="margin:0;">Visible on the live site</label>
+    </div>
+  </div>
+
+  <div class="card-box">
+    <h3>Product Images</h3>
+    {% if images %}
+    <div class="image-upload-grid">
+      {% for img in images %}
+      <div class="thumb-wrap">
+        <img src="{{ url_for('static', filename='uploads/' ~ img.filename) }}">
+        <form method="POST" action="{{ url_for('admin_product_image_delete', image_id=img.id) }}"
+              onsubmit="return confirm('Remove this image?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="product_id" value="{{ product.id }}">
+          <button class="del-btn" type="submit">✕</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <div class="field">
+      <label>Add Images</label>
+      <input type="file" name="images" accept="image/png,image/jpeg,image/webp" multiple>
+      <small>You can select several images at once. First image is used as the main photo.</small>
+    </div>
+  </div>
+
+  <button class="btn" type="submit">Save Product</button>
+</form>
+{% endblock %}

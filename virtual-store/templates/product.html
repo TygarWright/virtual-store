@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name }} — {{ settings.site_name }}{% endblock %}
+{% block content %}
+<section class="section">
+  <div class="container product-detail">
+    <div class="product-gallery">
+      <div class="product-gallery__main">
+        {% if images %}
+          <img id="mainImage" src="{{ url_for('static', filename='uploads/' ~ images[0]) }}" alt="{{ product.name }}">
+        {% else %}
+          <div class="card__placeholder" style="height:100%;">{{ product.name[0]|upper }}</div>
+        {% endif %}
+      </div>
+      {% if images|length > 1 %}
+      <div class="product-gallery__thumbs">
+        {% for img in images %}
+          <img src="{{ url_for('static', filename='uploads/' ~ img) }}"
+               class="{{ 'active' if loop.first else '' }}"
+               onclick="document.getElementById('mainImage').src=this.src; document.querySelectorAll('.product-gallery__thumbs img').forEach(function(t){t.classList.remove('active')}); this.classList.add('active');">
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="product-info">
+      <span class="eyebrow">{{ settings.site_name }}</span>
+      <h1>{{ product.name }}</h1>
+      <div class="product-price">{{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}</div>
+      <p>{{ product.short_description }}</p>
+      <div class="divider"></div>
+      <div class="product-description">{{ product.description }}</div>
+
+      <div id="buyForm">
+        <div class="field">
+          <label>Full Name</label>
+          <input type="text" id="buyerName" placeholder="Your name">
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="buyerEmail" placeholder="you@example.com">
+          <small>Your product & order status will be tied to this email.</small>
+        </div>
+        <div class="field">
+          <label>Phone (optional)</label>
+          <input type="tel" id="buyerPhone" placeholder="For faster support">
+        </div>
+        <button class="btn btn--full" id="buyBtn" onclick="startCheckout({{ product.id }}, '{{ product.name|e }}')">
+          Buy Now — {{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}
+        </button>
+        <p id="buyError" style="color:#7a2222; margin-top:0.75rem; display:none;"></p>
+        <p style="margin-top:1rem; font-size:0.8rem; color:var(--grey-500);">
+          Secure payment via Razorpay. After payment, your order is reviewed and delivered by our team —
+          you'll be able to track its status any time.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>const RAZORPAY_KEY = "{{ razorpay_key }}";</script>
+<script src="{{ url_for('static', filename='js/checkout.js') }}"></script>
+{% endblock %}

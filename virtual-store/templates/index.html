@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="hero">
+  <div class="container">
+    <div class="hero__rule"></div>
+    <span class="eyebrow">{{ settings.site_tagline }}</span>
+    <h1>{{ settings.hero_title }}</h1>
+    <p>{{ settings.hero_subtitle }}</p>
+    <a href="#products" class="btn">Explore the Catalogue</a>
+  </div>
+</section>
+
+{% for section in sections %}
+<section class="section {{ 'section--invert' if loop.index is odd else '' }}">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow">{{ loop.index }} / {{ sections|length }}</span>
+      <h2>{{ section.title }}</h2>
+    </div>
+    <div style="max-width:720px;margin:0 auto;text-align:center;white-space:pre-line;">
+      {{ section.content }}
+    </div>
+  </div>
+</section>
+{% endfor %}
+
+<section class="section" id="products">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow">The Catalogue</span>
+      <h2>Our Products</h2>
+    </div>
+    {% if products %}
+    <div class="grid">
+      {% for p in products %}
+      <a class="card" href="{{ url_for('product_detail', slug=p.slug) }}">
+        <div class="card__image">
+          {% if product_images[p.id] %}
+            <img src="{{ url_for('static', filename='uploads/' ~ product_images[p.id]) }}" alt="{{ p.name }}">
+          {% else %}
+            <div class="card__placeholder">{{ p.name[0]|upper }}</div>
+          {% endif %}
+        </div>
+        <div class="card__title">{{ p.name }}</div>
+        <div class="card__price">{{ settings.currency_symbol }}{{ "{:,}".format(p.price) }}</div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">Nothing here yet — check back soon.</div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="section section--tight" id="about">
+  <div class="container" style="max-width:720px; text-align:center;">
+    <span class="eyebrow">{{ settings.about_title }}</span>
+    <div style="white-space:pre-line; margin-top:1rem;">{{ settings.about_content }}</div>
+  </div>
+</section>
+
+{% endblock %}

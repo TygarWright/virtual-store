@@ -1,0 +1,26 @@
+{% extends "admin/base.html" %}
+{% block title %}My Account{% endblock %}
+{% block content %}
+<div class="admin-topbar"><h1>My Account</h1></div>
+
+<div class="card-box" style="max-width:460px;">
+  <h3>Change Password</h3>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field">
+      <label>Current Password</label>
+      <input type="password" name="current_password" required>
+    </div>
+    <div class="field">
+      <label>New Password</label>
+      <input type="password" name="new_password" required minlength="8">
+      <small>At least 8 characters.</small>
+    </div>
+    <div class="field">
+      <label>Confirm New Password</label>
+      <input type="password" name="confirm_password" required minlength="8">
+    </div>
+    <button class="btn" type="submit">Update Password</button>
+  </form>
+</div>
+{% endblock %}

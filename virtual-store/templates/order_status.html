@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Track Your Order — {{ settings.site_name }}{% endblock %}
+{% block content %}
+<section class="section">
+  <div class="container form-card">
+    <div class="section-head" style="margin-bottom:2rem;">
+      <span class="eyebrow">Order Status</span>
+      <h2>Track Your Order</h2>
+    </div>
+
+    <form method="POST">
+      <div class="field">
+        <label>Order Reference</label>
+        <input type="text" name="order_ref" placeholder="ORD-XXXXXX" required
+               value="{{ request.form.get('order_ref', '') }}">
+      </div>
+      <div class="field">
+        <label>Email used at checkout</label>
+        <input type="email" name="email" placeholder="you@example.com" required
+               value="{{ request.form.get('email', '') }}">
+      </div>
+      <button class="btn btn--full" type="submit">Check Status</button>
+    </form>
+
+    {% if searched %}
+      <div class="divider"></div>
+      {% if order %}
+        <h3 style="font-family:var(--serif);">{{ order.product_name }}</h3>
+        <p>
+          Status:
+          <span class="badge badge--{{ order.status }}">{{ order.status }}</span>
+        </p>
+        {% if order.status == 'created' %}
+          <p>We haven't received payment for this order yet.</p>
+        {% elif order.status == 'paid' %}
+          <p>Payment received! Your order is being prepared and will be delivered shortly.</p>
+        {% elif order.status == 'delivered' %}
+          <p>Your order has been delivered:</p>
+          <div class="card-box" style="white-space:pre-line;">{{ order.delivery_message }}</div>
+        {% elif order.status == 'cancelled' %}
+          <p>This order was cancelled. Please contact us if you have questions.</p>
+        {% elif order.status == 'failed' %}
+          <p>Payment for this order could not be verified. Please try again or contact us.</p>
+        {% endif %}
+      {% else %}
+        <p style="color:#7a2222;">No order found with that reference and email. Please double-check and try again.</p>
+      {% endif %}
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "admin/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="admin-topbar"><h1>Dashboard</h1></div>
+
+{% if not razorpay_configured %}
+<div class="flash flash--error">
+  Razorpay isn't connected yet, so customers can't pay. Ask whoever set up your hosting to add your
+  <strong>Razorpay Key ID</strong> and <strong>Key Secret</strong> to the site's settings (this is a one-time technical step).
+</div>
+{% endif %}
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="num">{{ stats.products }}</div><div class="label">Products</div></div>
+  <div class="stat-card"><div class="num">{{ stats.pending }}</div><div class="label">Awaiting Delivery</div></div>
+  <div class="stat-card"><div class="num">{{ stats.delivered }}</div><div class="label">Delivered</div></div>
+  <div class="stat-card"><div class="num">₹{{ "{:,}".format(stats.revenue) }}</div><div class="label">Total Revenue</div></div>
+</div>
+
+{% if stats.pending > 0 %}
+<div class="flash flash--success">
+  You have <strong>{{ stats.pending }}</strong> paid order(s) waiting to be delivered.
+  <a href="{{ url_for('admin_orders', status='paid') }}">Go deliver them →</a>
+</div>
+{% endif %}
+
+<h3 style="margin-top:2.5rem;">Recent Orders</h3>
+{% if recent_orders %}
+<table class="table">
+  <tr><th>Order</th><th>Product</th><th>Customer</th><th>Amount</th><th>Status</th><th></th></tr>
+  {% for o in recent_orders %}
+  <tr>
+    <td>{{ o.order_ref }}</td>
+    <td>{{ o.product_name }}</td>
+    <td>{{ o.customer_name }}</td>
+    <td>₹{{ "{:,}".format(o.amount) }}</td>
+    <td><span class="badge badge--{{ o.status }}">{{ o.status }}</span></td>
+    <td><a href="{{ url_for('admin_order_detail', order_id=o.id) }}">View →</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="empty-state">No orders yet.</div>
+{% endif %}
+{% endblock %}

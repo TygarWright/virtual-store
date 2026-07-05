@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Admin{% endblock %} — Admin Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="admin-shell">
+  <aside class="admin-sidebar">
+    <a href="{{ url_for('admin_dashboard') }}" class="admin-sidebar__brand">Admin Panel</a>
+    <nav class="admin-nav">
+      <a href="{{ url_for('admin_dashboard') }}" class="{{ 'active' if request.endpoint == 'admin_dashboard' }}">Dashboard</a>
+      <a href="{{ url_for('admin_orders') }}" class="{{ 'active' if 'admin_order' in request.endpoint }}">Orders</a>
+      <a href="{{ url_for('admin_products') }}" class="{{ 'active' if 'admin_product' in request.endpoint }}">Products</a>
+      <a href="{{ url_for('admin_sections') }}" class="{{ 'active' if 'admin_sections' in request.endpoint }}">Homepage Sections</a>
+      <a href="{{ url_for('admin_settings') }}" class="{{ 'active' if request.endpoint == 'admin_settings' }}">Site Settings</a>
+      <div class="divider-light"></div>
+      <a href="{{ url_for('home') }}" target="_blank">View Live Site ↗</a>
+      <a href="{{ url_for('admin_account') }}" class="{{ 'active' if request.endpoint == 'admin_account' }}">My Account</a>
+      <a href="{{ url_for('admin_logout') }}">Log Out</a>
+    </nav>
+  </aside>
+  <main class="admin-main">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash flash--{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+</body>
+</html>

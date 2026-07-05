@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}{{ settings.site_name }}{% endblock %}</title>
+<meta name="description" content="{{ settings.meta_description }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% block head %}{% endblock %}
+</head>
+<body>
+<nav class="nav">
+  <div class="container">
+    <a href="{{ url_for('home') }}" class="nav__brand">{{ settings.site_name }}</a>
+    <div class="nav__links">
+      <a href="{{ url_for('home') }}#products">Shop</a>
+      <a href="{{ url_for('home') }}#about">About</a>
+      <a href="{{ url_for('track_order') }}">Track Order</a>
+    </div>
+  </div>
+</nav>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="container" style="padding-top:1.5rem;">
+      {% for category, message in messages %}
+        <div class="flash flash--{{ category }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+{% block content %}{% endblock %}
+
+<footer class="footer">
+  <div class="container">
+    <span>&copy; {{ settings.site_name }} — {{ settings.footer_text }}</span>
+    <span>{{ settings.contact_email }} · {{ settings.contact_phone }}</span>
+  </div>
+</footer>
+</body>
+</html>
