@@ -10,6 +10,9 @@
   <h3>Details</h3>
   <p><strong>Product:</strong> {{ order.product_name }}</p>
   <p><strong>Amount:</strong> ₹{{ "{:,}".format(order.amount) }}</p>
+  {% if order.coupon_code %}
+  <p><strong>Coupon Used:</strong> {{ order.coupon_code }} (saved customer ₹{{ order.discount_amount }})</p>
+  {% endif %}
   <p><strong>Status:</strong> <span class="badge badge--{{ order.status }}">{{ order.status }}</span></p>
   <p><strong>Customer:</strong> {{ order.customer_name }}</p>
   <p><strong>Email:</strong> {{ order.customer_email }}</p>

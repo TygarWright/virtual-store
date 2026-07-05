@@ -11,14 +11,21 @@
   </div>
 </section>
 
+<div class="marquee">
+  <div class="marquee__track">
+    <span>Secure Checkout</span><span>Considered Craft</span><span>Curated Selection</span><span>Handled With Care</span>
+    <span>Secure Checkout</span><span>Considered Craft</span><span>Curated Selection</span><span>Handled With Care</span>
+  </div>
+</div>
+
 {% for section in sections %}
 <section class="section {{ 'section--invert' if loop.index is odd else '' }}">
   <div class="container">
-    <div class="section-head">
+    <div class="section-head reveal">
       <span class="eyebrow">{{ loop.index }} / {{ sections|length }}</span>
       <h2>{{ section.title }}</h2>
     </div>
-    <div style="max-width:720px;margin:0 auto;text-align:center;white-space:pre-line;">
+    <div class="reveal" style="max-width:720px;margin:0 auto;text-align:center;white-space:pre-line;">
       {{ section.content }}
     </div>
   </div>
@@ -27,14 +34,24 @@
 
 <section class="section" id="products">
   <div class="container">
-    <div class="section-head">
+    <div class="section-head reveal">
       <span class="eyebrow">The Catalogue</span>
       <h2>Our Products</h2>
     </div>
+
+    {% if categories %}
+    <div class="filter-tabs reveal">
+      <a href="{{ url_for('home') }}#products" class="filter-tab {{ 'active' if not active_category }}">All</a>
+      {% for c in categories %}
+      <a href="{{ url_for('home', category=c) }}#products" class="filter-tab {{ 'active' if active_category == c }}">{{ c }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
     {% if products %}
     <div class="grid">
       {% for p in products %}
-      <a class="card" href="{{ url_for('product_detail', slug=p.slug) }}">
+      <a class="card reveal" style="--i: {{ loop.index0 }};" href="{{ url_for('product_detail', slug=p.slug) }}">
         <div class="card__image">
           {% if product_images[p.id] %}
             <img src="{{ url_for('static', filename='uploads/' ~ product_images[p.id]) }}" alt="{{ p.name }}">
@@ -42,21 +59,76 @@
             <div class="card__placeholder">{{ p.name[0]|upper }}</div>
           {% endif %}
         </div>
+        {% if p.category %}<div class="card__category">{{ p.category }}</div>{% endif %}
         <div class="card__title">{{ p.name }}</div>
         <div class="card__price">{{ settings.currency_symbol }}{{ "{:,}".format(p.price) }}</div>
       </a>
       {% endfor %}
     </div>
     {% else %}
-    <div class="empty-state">Nothing here yet — check back soon.</div>
+    <div class="empty-state">
+      {% if active_category %}No products in "{{ active_category }}" right now.
+      {% else %}Nothing here yet — check back soon.{% endif %}
+    </div>
     {% endif %}
   </div>
 </section>
 
 <section class="section section--tight" id="about">
-  <div class="container" style="max-width:720px; text-align:center;">
+  <div class="container reveal" style="max-width:720px; text-align:center;">
     <span class="eyebrow">{{ settings.about_title }}</span>
     <div style="white-space:pre-line; margin-top:1rem;">{{ settings.about_content }}</div>
+  </div>
+</section>
+
+{% if testimonials %}
+<section class="section section--invert" id="testimonials">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow">What People Say</span>
+      <h2>Trusted By Our Customers</h2>
+    </div>
+    <div class="testimonial-grid">
+      {% for t in testimonials %}
+      <div class="testimonial-card reveal" style="--i: {{ loop.index0 }};">
+        <div class="testimonial-stars">{{ "★" * t.rating }}{{ "☆" * (5 - t.rating) }}</div>
+        <p class="testimonial-quote">&ldquo;{{ t.quote }}&rdquo;</p>
+        <div class="testimonial-name">{{ t.customer_name }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+{% if faqs %}
+<section class="section" id="faq">
+  <div class="container" style="max-width:760px;">
+    <div class="section-head reveal">
+      <span class="eyebrow">Questions</span>
+      <h2>Frequently Asked</h2>
+    </div>
+    <div class="faq-list reveal">
+      {% for f in faqs %}
+      <details class="faq-item">
+        <summary>{{ f.question }}</summary>
+        <div class="faq-answer">{{ f.answer }}</div>
+      </details>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<section class="section section--tight section--invert" id="newsletter">
+  <div class="container" style="max-width:520px; text-align:center;">
+    <span class="eyebrow">Stay in the Loop</span>
+    <h2 style="margin-bottom:1.5rem;">Join Our List</h2>
+    <form method="POST" action="{{ url_for('newsletter_subscribe') }}" class="newsletter-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="email" name="email" placeholder="you@example.com" required>
+      <button class="btn btn--invert" type="submit">Subscribe</button>
+    </form>
   </div>
 </section>
 

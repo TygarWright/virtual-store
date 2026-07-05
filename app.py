@@ -40,9 +40,23 @@ def home():
     sections = conn.execute(
         "SELECT * FROM sections WHERE visible = 1 ORDER BY position ASC"
     ).fetchall()
-    products = conn.execute(
-        "SELECT * FROM products WHERE active = 1 ORDER BY position ASC, id DESC"
-    ).fetchall()
+
+    category = (request.args.get("category") or "").strip()
+    categories = [
+        r["category"] for r in conn.execute(
+            "SELECT DISTINCT category FROM products WHERE active = 1 AND category != '' ORDER BY category ASC"
+        ).fetchall()
+    ]
+    if category:
+        products = conn.execute(
+            "SELECT * FROM products WHERE active = 1 AND category = ? ORDER BY position ASC, id DESC",
+            (category,),
+        ).fetchall()
+    else:
+        products = conn.execute(
+            "SELECT * FROM products WHERE active = 1 ORDER BY position ASC, id DESC"
+        ).fetchall()
+
     product_images = {}
     for p in products:
         img = conn.execute(
@@ -50,10 +64,19 @@ def home():
             (p["id"],),
         ).fetchone()
         product_images[p["id"]] = img["filename"] if img else None
+
+    testimonials = conn.execute(
+        "SELECT * FROM testimonials WHERE visible = 1 ORDER BY position ASC"
+    ).fetchall()
+    faqs = conn.execute(
+        "SELECT * FROM faqs WHERE visible = 1 ORDER BY position ASC"
+    ).fetchall()
     conn.close()
     return render_template(
         "index.html", settings=settings, sections=sections,
         products=products, product_images=product_images,
+        categories=categories, active_category=category,
+        testimonials=testimonials, faqs=faqs,
     )
 
 
@@ -86,6 +109,7 @@ def api_create_order():
     name = (data.get("name") or "").strip()
     email = (data.get("email") or "").strip()
     phone = (data.get("phone") or "").strip()
+    coupon_code = (data.get("coupon_code") or "").strip().upper()
 
     if not all([product_id, name, email]):
         return jsonify({"error": "Please fill in your name and email."}), 400
@@ -102,9 +126,33 @@ def api_create_order():
         conn.close()
         return jsonify({"error": "Payments are not configured yet. Please contact the site owner."}), 503
 
+    final_amount = product["price"]
+    discount_amount = 0
+    applied_code = ""
+
+    if coupon_code:
+        coupon = conn.execute(
+            "SELECT * FROM coupons WHERE code = ? AND active = 1", (coupon_code,)
+        ).fetchone()
+        if not coupon:
+            conn.close()
+            return jsonify({"error": "That coupon code isn't valid."}), 400
+        if coupon["usage_limit"] is not None and coupon["used_count"] >= coupon["usage_limit"]:
+            conn.close()
+            return jsonify({"error": "That coupon has already been fully redeemed."}), 400
+
+        if coupon["discount_type"] == "percent":
+            discount_amount = int(round(product["price"] * coupon["discount_value"] / 100))
+        else:
+            discount_amount = coupon["discount_value"]
+        discount_amount = min(discount_amount, product["price"] - 1) if product["price"] > 0 else 0
+        discount_amount = max(discount_amount, 0)
+        final_amount = product["price"] - discount_amount
+        applied_code = coupon["code"]
+
     order_ref = db.new_order_ref()
     try:
-        rzp_order = rzp.create_order(product["price"], receipt=order_ref)
+        rzp_order = rzp.create_order(final_amount, receipt=order_ref)
     except Exception:
         conn.close()
         return jsonify({"error": "Could not start payment. Please try again."}), 502
@@ -112,10 +160,10 @@ def api_create_order():
     conn.execute(
         """INSERT INTO orders
            (order_ref, product_id, product_name, customer_name, customer_email,
-            customer_phone, amount, razorpay_order_id, status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'created', ?)""",
+            customer_phone, amount, coupon_code, discount_amount, razorpay_order_id, status, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'created', ?)""",
         (order_ref, product["id"], product["name"], name, email, phone,
-         product["price"], rzp_order["id"], db.now()),
+         final_amount, applied_code, discount_amount, rzp_order["id"], db.now()),
     )
     conn.commit()
     conn.close()
@@ -131,6 +179,32 @@ def api_create_order():
         "customer_email": email,
         "customer_phone": phone,
     })
+
+
+@app.route("/api/apply-coupon", methods=["POST"])
+def api_apply_coupon():
+    data = request.get_json(force=True, silent=True) or {}
+    code = (data.get("code") or "").strip().upper()
+    product_id = data.get("product_id")
+    conn = db.get_db()
+    product = conn.execute("SELECT * FROM products WHERE id = ? AND active = 1", (product_id,)).fetchone()
+    if not product:
+        conn.close()
+        return jsonify({"error": "Product not found."}), 404
+    coupon = conn.execute("SELECT * FROM coupons WHERE code = ? AND active = 1", (code,)).fetchone()
+    conn.close()
+    if not coupon:
+        return jsonify({"error": "That coupon code isn't valid."}), 400
+    if coupon["usage_limit"] is not None and coupon["used_count"] >= coupon["usage_limit"]:
+        return jsonify({"error": "That coupon has already been fully redeemed."}), 400
+
+    if coupon["discount_type"] == "percent":
+        discount = int(round(product["price"] * coupon["discount_value"] / 100))
+    else:
+        discount = coupon["discount_value"]
+    discount = max(0, min(discount, product["price"] - 1 if product["price"] > 0 else 0))
+    final_price = product["price"] - discount
+    return jsonify({"success": True, "discount_amount": discount, "final_price": final_price, "code": coupon["code"]})
 
 
 @app.route("/api/verify-payment", methods=["POST"])
@@ -167,6 +241,11 @@ def api_verify_payment():
            razorpay_signature = ?, paid_at = ? WHERE id = ?""",
         (rzp_payment_id, rzp_signature, db.now(), order["id"]),
     )
+    if order["coupon_code"]:
+        conn.execute(
+            "UPDATE coupons SET used_count = used_count + 1 WHERE code = ?",
+            (order["coupon_code"],),
+        )
     conn.commit()
     conn.close()
 
@@ -189,18 +268,67 @@ def api_verify_payment():
 def track_order():
     order = None
     searched = False
+    prefill_ref = request.args.get("order_ref", "")
+    prefill_email = request.args.get("email", "")
+
     if request.method == "POST":
-        searched = True
         order_ref = (request.form.get("order_ref") or "").strip().upper()
         email = (request.form.get("email") or "").strip().lower()
+        searched = True
+    elif prefill_ref and prefill_email:
+        order_ref = prefill_ref.strip().upper()
+        email = prefill_email.strip().lower()
+        searched = True
+    else:
+        order_ref = email = None
+
+    if searched:
         conn = db.get_db()
         order = conn.execute(
             "SELECT * FROM orders WHERE order_ref = ? AND lower(customer_email) = ?",
             (order_ref, email),
         ).fetchone()
         conn.close()
+
     settings = get_settings()
-    return render_template("order_status.html", settings=settings, order=order, searched=searched)
+    return render_template(
+        "order_status.html", settings=settings, order=order, searched=searched,
+        prefill_ref=prefill_ref, prefill_email=prefill_email,
+    )
+
+
+@app.route("/newsletter/subscribe", methods=["POST"])
+def newsletter_subscribe():
+    email = (request.form.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        flash("Please enter a valid email address.", "error")
+        return redirect(url_for("home") + "#newsletter")
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO newsletter_subscribers (email, created_at) VALUES (?, ?)",
+            (email, db.now()),
+        )
+        conn.commit()
+        flash("You're subscribed! We'll keep you posted.", "success")
+    except Exception:
+        flash("You're already on the list — thank you!", "success")
+    conn.close()
+    return redirect(url_for("home") + "#newsletter")
+
+
+@app.route("/sitemap.xml")
+def sitemap():
+    conn = db.get_db()
+    products = conn.execute("SELECT slug FROM products WHERE active = 1").fetchall()
+    conn.close()
+    urls = [url_for("home", _external=True), url_for("track_order", _external=True)]
+    urls += [url_for("product_detail", slug=p["slug"], _external=True) for p in products]
+    xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for u in urls:
+        xml.append(f"<url><loc>{u}</loc></url>")
+    xml.append("</urlset>")
+    return "\n".join(xml), 200, {"Content-Type": "application/xml"}
 
 
 @app.errorhandler(404)
@@ -380,7 +508,8 @@ def admin_product_new():
     if request.method == "POST":
         check_csrf()
         return _save_product(None)
-    return render_template("admin/product_form.html", product=None, images=[])
+    categories = _existing_categories()
+    return render_template("admin/product_form.html", product=None, images=[], categories=categories)
 
 
 @app.route("/admin/products/edit/<int:product_id>", methods=["GET", "POST"])
@@ -399,7 +528,17 @@ def admin_product_edit(product_id):
         "SELECT * FROM product_images WHERE product_id = ? ORDER BY position ASC", (product_id,)
     ).fetchall()
     conn.close()
-    return render_template("admin/product_form.html", product=product, images=images)
+    categories = _existing_categories()
+    return render_template("admin/product_form.html", product=product, images=images, categories=categories)
+
+
+def _existing_categories():
+    conn = db.get_db()
+    rows = conn.execute(
+        "SELECT DISTINCT category FROM products WHERE category != '' ORDER BY category ASC"
+    ).fetchall()
+    conn.close()
+    return [r["category"] for r in rows]
 
 
 def _save_product(product_id):
@@ -407,6 +546,7 @@ def _save_product(product_id):
     short_description = request.form.get("short_description", "").strip()
     description = request.form.get("description", "").strip()
     price_raw = request.form.get("price", "0").strip()
+    category = request.form.get("category", "").strip()
     active = 1 if request.form.get("active") else 0
 
     if not name:
@@ -424,8 +564,8 @@ def _save_product(product_id):
     if product_id:
         conn.execute(
             """UPDATE products SET name=?, short_description=?, description=?,
-               price=?, active=? WHERE id=?""",
-            (name, short_description, description, price, active, product_id),
+               price=?, category=?, active=? WHERE id=?""",
+            (name, short_description, description, price, category, active, product_id),
         )
     else:
         slug_base = slugify(name)
@@ -437,8 +577,8 @@ def _save_product(product_id):
         max_pos = conn.execute("SELECT COALESCE(MAX(position), -1) m FROM products").fetchone()["m"]
         cur = conn.execute(
             """INSERT INTO products (name, slug, short_description, description, price,
-               active, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (name, slug, short_description, description, price, active, max_pos + 1, db.now()),
+               category, active, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (name, slug, short_description, description, price, category, active, max_pos + 1, db.now()),
         )
         product_id = cur.lastrowid
 
@@ -570,6 +710,251 @@ def admin_order_cancel(order_id):
     conn.close()
     flash("Order cancelled.", "success")
     return redirect(url_for("admin_order_detail", order_id=order_id))
+
+
+# ============================================================= ADMIN: COUPONS
+
+@app.route("/admin/coupons")
+@login_required
+def admin_coupons():
+    conn = db.get_db()
+    coupons = conn.execute("SELECT * FROM coupons ORDER BY id DESC").fetchall()
+    conn.close()
+    return render_template("admin/coupons.html", coupons=coupons)
+
+
+@app.route("/admin/coupons/save", methods=["POST"])
+@login_required
+def admin_coupons_save():
+    check_csrf()
+    code = request.form.get("code", "").strip().upper()
+    discount_type = request.form.get("discount_type", "percent")
+    discount_value_raw = request.form.get("discount_value", "0").strip()
+    usage_limit_raw = request.form.get("usage_limit", "").strip()
+    active = 1 if request.form.get("active") else 0
+
+    if not code:
+        flash("Please enter a coupon code.", "error")
+        return redirect(url_for("admin_coupons"))
+    try:
+        discount_value = int(discount_value_raw)
+        if discount_value <= 0:
+            raise ValueError
+        if discount_type == "percent" and discount_value > 100:
+            raise ValueError
+    except ValueError:
+        flash("Please enter a valid discount amount.", "error")
+        return redirect(url_for("admin_coupons"))
+
+    usage_limit = int(usage_limit_raw) if usage_limit_raw.isdigit() else None
+
+    conn = db.get_db()
+    try:
+        conn.execute(
+            """INSERT INTO coupons (code, discount_type, discount_value, active, usage_limit, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (code, discount_type, discount_value, active, usage_limit, db.now()),
+        )
+        conn.commit()
+        flash(f"Coupon {code} created.", "success")
+    except Exception:
+        flash("A coupon with that code already exists.", "error")
+    conn.close()
+    return redirect(url_for("admin_coupons"))
+
+
+@app.route("/admin/coupons/toggle/<int:coupon_id>", methods=["POST"])
+@login_required
+def admin_coupons_toggle(coupon_id):
+    check_csrf()
+    conn = db.get_db()
+    conn.execute("UPDATE coupons SET active = 1 - active WHERE id = ?", (coupon_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("admin_coupons"))
+
+
+@app.route("/admin/coupons/delete/<int:coupon_id>", methods=["POST"])
+@login_required
+def admin_coupons_delete(coupon_id):
+    check_csrf()
+    conn = db.get_db()
+    conn.execute("DELETE FROM coupons WHERE id = ?", (coupon_id,))
+    conn.commit()
+    conn.close()
+    flash("Coupon deleted.", "success")
+    return redirect(url_for("admin_coupons"))
+
+
+# ============================================================= ADMIN: TESTIMONIALS
+
+@app.route("/admin/testimonials")
+@login_required
+def admin_testimonials():
+    conn = db.get_db()
+    testimonials = conn.execute("SELECT * FROM testimonials ORDER BY position ASC").fetchall()
+    conn.close()
+    return render_template("admin/testimonials.html", testimonials=testimonials)
+
+
+@app.route("/admin/testimonials/save", methods=["POST"])
+@login_required
+def admin_testimonials_save():
+    check_csrf()
+    testimonial_id = request.form.get("id")
+    customer_name = request.form.get("customer_name", "").strip()
+    quote = request.form.get("quote", "").strip()
+    rating = request.form.get("rating", "5")
+    visible = 1 if request.form.get("visible") else 0
+
+    if not customer_name or not quote:
+        flash("Please fill in both a name and a quote.", "error")
+        return redirect(url_for("admin_testimonials"))
+
+    conn = db.get_db()
+    if testimonial_id:
+        conn.execute(
+            "UPDATE testimonials SET customer_name=?, quote=?, rating=?, visible=? WHERE id=?",
+            (customer_name, quote, rating, visible, testimonial_id),
+        )
+    else:
+        max_pos = conn.execute("SELECT COALESCE(MAX(position), -1) m FROM testimonials").fetchone()["m"]
+        conn.execute(
+            "INSERT INTO testimonials (customer_name, quote, rating, position, visible) VALUES (?, ?, ?, ?, ?)",
+            (customer_name, quote, rating, max_pos + 1, visible),
+        )
+    conn.commit()
+    conn.close()
+    flash("Testimonial saved.", "success")
+    return redirect(url_for("admin_testimonials"))
+
+
+@app.route("/admin/testimonials/delete/<int:testimonial_id>", methods=["POST"])
+@login_required
+def admin_testimonials_delete(testimonial_id):
+    check_csrf()
+    conn = db.get_db()
+    conn.execute("DELETE FROM testimonials WHERE id = ?", (testimonial_id,))
+    conn.commit()
+    conn.close()
+    flash("Testimonial removed.", "success")
+    return redirect(url_for("admin_testimonials"))
+
+
+# ============================================================= ADMIN: FAQS
+
+@app.route("/admin/faqs")
+@login_required
+def admin_faqs():
+    conn = db.get_db()
+    faqs = conn.execute("SELECT * FROM faqs ORDER BY position ASC").fetchall()
+    conn.close()
+    return render_template("admin/faqs.html", faqs=faqs)
+
+
+@app.route("/admin/faqs/save", methods=["POST"])
+@login_required
+def admin_faqs_save():
+    check_csrf()
+    faq_id = request.form.get("id")
+    question = request.form.get("question", "").strip()
+    answer = request.form.get("answer", "").strip()
+    visible = 1 if request.form.get("visible") else 0
+
+    if not question or not answer:
+        flash("Please fill in both the question and the answer.", "error")
+        return redirect(url_for("admin_faqs"))
+
+    conn = db.get_db()
+    if faq_id:
+        conn.execute(
+            "UPDATE faqs SET question=?, answer=?, visible=? WHERE id=?",
+            (question, answer, visible, faq_id),
+        )
+    else:
+        max_pos = conn.execute("SELECT COALESCE(MAX(position), -1) m FROM faqs").fetchone()["m"]
+        conn.execute(
+            "INSERT INTO faqs (question, answer, position, visible) VALUES (?, ?, ?, ?)",
+            (question, answer, max_pos + 1, visible),
+        )
+    conn.commit()
+    conn.close()
+    flash("FAQ saved.", "success")
+    return redirect(url_for("admin_faqs"))
+
+
+@app.route("/admin/faqs/delete/<int:faq_id>", methods=["POST"])
+@login_required
+def admin_faqs_delete(faq_id):
+    check_csrf()
+    conn = db.get_db()
+    conn.execute("DELETE FROM faqs WHERE id = ?", (faq_id,))
+    conn.commit()
+    conn.close()
+    flash("FAQ removed.", "success")
+    return redirect(url_for("admin_faqs"))
+
+
+# ============================================================= ADMIN: NEWSLETTER
+
+@app.route("/admin/newsletter")
+@login_required
+def admin_newsletter():
+    conn = db.get_db()
+    subscribers = conn.execute(
+        "SELECT * FROM newsletter_subscribers ORDER BY id DESC"
+    ).fetchall()
+    conn.close()
+    return render_template("admin/newsletter.html", subscribers=subscribers)
+
+
+@app.route("/admin/newsletter/export.csv")
+@login_required
+def admin_newsletter_export():
+    import csv
+    import io
+    conn = db.get_db()
+    subscribers = conn.execute(
+        "SELECT email, created_at FROM newsletter_subscribers ORDER BY id DESC"
+    ).fetchall()
+    conn.close()
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Email", "Subscribed At"])
+    for s in subscribers:
+        writer.writerow([s["email"], s["created_at"]])
+    return buf.getvalue(), 200, {
+        "Content-Type": "text/csv",
+        "Content-Disposition": "attachment; filename=newsletter_subscribers.csv",
+    }
+
+
+# ============================================================= ADMIN: ORDERS EXPORT
+
+@app.route("/admin/orders/export.csv")
+@login_required
+def admin_orders_export():
+    import csv
+    import io
+    conn = db.get_db()
+    orders = conn.execute("SELECT * FROM orders ORDER BY id DESC").fetchall()
+    conn.close()
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Order Ref", "Product", "Customer Name", "Email", "Phone", "Amount",
+        "Coupon", "Discount", "Status", "Created", "Paid", "Delivered",
+    ])
+    for o in orders:
+        writer.writerow([
+            o["order_ref"], o["product_name"], o["customer_name"], o["customer_email"],
+            o["customer_phone"], o["amount"], o["coupon_code"], o["discount_amount"],
+            o["status"], o["created_at"], o["paid_at"], o["delivered_at"],
+        ])
+    return buf.getvalue(), 200, {
+        "Content-Type": "text/csv",
+        "Content-Disposition": "attachment; filename=orders.csv",
+    }
 
 
 # ============================================================= ADMIN: ACCOUNT

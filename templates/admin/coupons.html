@@ -1,0 +1,72 @@
+{% extends "admin/base.html" %}
+{% block title %}Coupons{% endblock %}
+{% block content %}
+<div class="admin-topbar"><h1>Coupons</h1></div>
+<p class="help-text">
+  Create discount codes customers can enter at checkout. Percentage codes take a % off;
+  Flat codes take a fixed ₹ amount off.
+</p>
+
+<div class="card-box">
+  <h3>Create New Coupon</h3>
+  <form method="POST" action="{{ url_for('admin_coupons_save') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field">
+      <label>Code</label>
+      <input type="text" name="code" placeholder="e.g. WELCOME10" required style="text-transform:uppercase;">
+      <small>What customers type at checkout. Not case-sensitive.</small>
+    </div>
+    <div class="field">
+      <label>Discount Type</label>
+      <select name="discount_type">
+        <option value="percent">Percentage off (%)</option>
+        <option value="flat">Flat amount off (₹)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Discount Value</label>
+      <input type="number" name="discount_value" min="1" placeholder="e.g. 10" required>
+      <small>For percentage, enter a number 1–100. For flat, enter the rupee amount.</small>
+    </div>
+    <div class="field">
+      <label>Usage Limit (optional)</label>
+      <input type="number" name="usage_limit" min="1" placeholder="Leave blank for unlimited uses">
+    </div>
+    <div class="field field--checkbox">
+      <input type="checkbox" name="active" id="coupon-active" checked>
+      <label for="coupon-active" style="margin:0;">Active immediately</label>
+    </div>
+    <button class="btn" type="submit">Create Coupon</button>
+  </form>
+</div>
+
+{% if coupons %}
+<table class="table">
+  <tr><th>Code</th><th>Discount</th><th>Used</th><th>Status</th><th></th></tr>
+  {% for c in coupons %}
+  <tr>
+    <td><strong>{{ c.code }}</strong></td>
+    <td>{{ c.discount_value }}{{ '%' if c.discount_type == 'percent' else ' ₹ off' }}</td>
+    <td>{{ c.used_count }}{{ '/' ~ c.usage_limit if c.usage_limit else '' }}</td>
+    <td>
+      {% if c.active %}<span class="badge badge--delivered">Active</span>
+      {% else %}<span class="badge badge--cancelled">Off</span>{% endif %}
+    </td>
+    <td class="row-actions">
+      <form method="POST" action="{{ url_for('admin_coupons_toggle', coupon_id=c.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn--outline btn--sm" type="submit">{{ 'Deactivate' if c.active else 'Activate' }}</button>
+      </form>
+      <form method="POST" action="{{ url_for('admin_coupons_delete', coupon_id=c.id) }}"
+            onsubmit="return confirm('Delete this coupon?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn--danger btn--sm" type="submit">Delete</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="empty-state">No coupons yet.</div>
+{% endif %}
+{% endblock %}

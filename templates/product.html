@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% block title %}{{ product.name }} — {{ settings.site_name }}{% endblock %}
+{% block og_title %}{{ product.name }} — {{ settings.site_name }}{% endblock %}
 {% block content %}
 <section class="section">
   <div class="container product-detail">
-    <div class="product-gallery">
+    <div class="product-gallery reveal">
       <div class="product-gallery__main">
         {% if images %}
           <img id="mainImage" src="{{ url_for('static', filename='uploads/' ~ images[0]) }}" alt="{{ product.name }}">
@@ -16,16 +17,19 @@
         {% for img in images %}
           <img src="{{ url_for('static', filename='uploads/' ~ img) }}"
                class="{{ 'active' if loop.first else '' }}"
-               onclick="document.getElementById('mainImage').src=this.src; document.querySelectorAll('.product-gallery__thumbs img').forEach(function(t){t.classList.remove('active')}); this.classList.add('active');">
+               onclick="swapGalleryImage(this.src, this)">
         {% endfor %}
       </div>
       {% endif %}
     </div>
 
-    <div class="product-info">
-      <span class="eyebrow">{{ settings.site_name }}</span>
+    <div class="product-info reveal" style="--i: 1;">
+      <span class="eyebrow">{{ product.category or settings.site_name }}</span>
       <h1>{{ product.name }}</h1>
-      <div class="product-price">{{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}</div>
+      <div class="product-price">
+        <span id="priceOriginal">{{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}</span>
+        <span id="priceDiscounted" style="display:none;"></span>
+      </div>
       <p>{{ product.short_description }}</p>
       <div class="divider"></div>
       <div class="product-description">{{ product.description }}</div>
@@ -44,7 +48,16 @@
           <label>Phone (optional)</label>
           <input type="tel" id="buyerPhone" placeholder="For faster support">
         </div>
-        <button class="btn btn--full" id="buyBtn" onclick="startCheckout({{ product.id }}, '{{ product.name|e }}')">
+        <div class="field">
+          <label>Coupon Code (optional)</label>
+          <div style="display:flex; gap:0.6rem;">
+            <input type="text" id="couponCode" placeholder="e.g. WELCOME10" style="text-transform:uppercase;">
+            <button type="button" class="btn btn--outline btn--sm" style="flex-shrink:0;" onclick="applyCoupon({{ product.id }})">Apply</button>
+          </div>
+          <p id="couponMessage" style="margin-top:0.5rem; font-size:0.82rem; display:none;"></p>
+        </div>
+        <button class="btn btn--full" id="buyBtn" data-base-price="{{ product.price }}" data-currency="{{ settings.currency_symbol }}"
+                onclick="startCheckout({{ product.id }}, '{{ product.name|e }}')">
           Buy Now — {{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}
         </button>
         <p id="buyError" style="color:#7a2222; margin-top:0.75rem; display:none;"></p>

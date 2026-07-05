@@ -3,6 +3,12 @@
 {% block content %}
 <section class="section">
   <div class="container form-card">
+    {% if prefill_ref and order and order.status == 'paid' %}
+    <div class="flash flash--success" style="text-align:center; margin-bottom:2rem;">
+      🎉 Thank you! Your payment was received. Save this page to check on your delivery.
+    </div>
+    {% endif %}
+
     <div class="section-head" style="margin-bottom:2rem;">
       <span class="eyebrow">Order Status</span>
       <h2>Track Your Order</h2>
@@ -12,12 +18,12 @@
       <div class="field">
         <label>Order Reference</label>
         <input type="text" name="order_ref" placeholder="ORD-XXXXXX" required
-               value="{{ request.form.get('order_ref', '') }}">
+               value="{{ request.form.get('order_ref', prefill_ref) }}">
       </div>
       <div class="field">
         <label>Email used at checkout</label>
         <input type="email" name="email" placeholder="you@example.com" required
-               value="{{ request.form.get('email', '') }}">
+               value="{{ request.form.get('email', prefill_email) }}">
       </div>
       <button class="btn btn--full" type="submit">Check Status</button>
     </form>
@@ -29,6 +35,10 @@
         <p>
           Status:
           <span class="badge badge--{{ order.status }}">{{ order.status }}</span>
+        </p>
+        <p style="color:var(--grey-500); font-size:0.9rem;">
+          Amount paid: {{ settings.currency_symbol }}{{ "{:,}".format(order.amount) }}
+          {% if order.coupon_code %}(coupon {{ order.coupon_code }} applied){% endif %}
         </p>
         {% if order.status == 'created' %}
           <p>We haven't received payment for this order yet.</p>

@@ -8,7 +8,7 @@
 
 {% if products %}
 <table class="table">
-  <tr><th></th><th>Name</th><th>Price</th><th>Status</th><th></th></tr>
+  <tr><th></th><th>Name</th><th>Category</th><th>Price</th><th>Status</th><th></th></tr>
   {% for p in products %}
   <tr>
     <td>
@@ -19,6 +19,7 @@
       {% endif %}
     </td>
     <td>{{ p.name }}</td>
+    <td>{{ p.category or "—" }}</td>
     <td>₹{{ "{:,}".format(p.price) }}</td>
     <td>
       {% if p.active %}<span class="badge badge--delivered">Live</span>

@@ -1,7 +1,10 @@
 {% extends "admin/base.html" %}
 {% block title %}Orders{% endblock %}
 {% block content %}
-<div class="admin-topbar"><h1>Orders</h1></div>
+<div class="admin-topbar">
+  <h1>Orders</h1>
+  <a href="{{ url_for('admin_orders_export') }}" class="btn btn--outline btn--sm">Download CSV</a>
+</div>
 
 <div class="row-actions" style="margin-bottom:1.5rem;">
   <a href="{{ url_for('admin_orders') }}" class="btn btn--sm {{ 'btn--outline' if status_filter }}">All</a>
@@ -18,7 +21,7 @@
     <td>{{ o.order_ref }}</td>
     <td>{{ o.product_name }}</td>
     <td>{{ o.customer_name }}<br><small style="color:var(--grey-500);">{{ o.customer_email }}</small></td>
-    <td>₹{{ "{:,}".format(o.amount) }}</td>
+    <td>₹{{ "{:,}".format(o.amount) }}{% if o.coupon_code %}<br><small style="color:var(--grey-500);">{{ o.coupon_code }} (-₹{{ o.discount_amount }})</small>{% endif %}</td>
     <td><span class="badge badge--{{ o.status }}">{{ o.status }}</span></td>
     <td><a href="{{ url_for('admin_order_detail', order_id=o.id) }}" class="btn btn--outline btn--sm">View</a></td>
   </tr>

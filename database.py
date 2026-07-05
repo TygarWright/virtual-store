@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS products (
     short_description TEXT NOT NULL DEFAULT '',
     description       TEXT NOT NULL DEFAULT '',
     price             INTEGER NOT NULL DEFAULT 0,
+    category          TEXT NOT NULL DEFAULT '',
     active            INTEGER NOT NULL DEFAULT 1,
     position          INTEGER NOT NULL DEFAULT 0,
     created_at        TEXT NOT NULL
@@ -53,6 +54,8 @@ CREATE TABLE IF NOT EXISTS orders (
     customer_email     TEXT NOT NULL,
     customer_phone     TEXT NOT NULL DEFAULT '',
     amount             INTEGER NOT NULL,
+    coupon_code        TEXT NOT NULL DEFAULT '',
+    discount_amount    INTEGER NOT NULL DEFAULT 0,
     razorpay_order_id  TEXT,
     razorpay_payment_id TEXT,
     razorpay_signature TEXT,
@@ -68,7 +71,50 @@ CREATE TABLE IF NOT EXISTS admin_users (
     username      TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS coupons (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    code           TEXT UNIQUE NOT NULL,
+    discount_type  TEXT NOT NULL DEFAULT 'percent',   -- 'percent' or 'flat'
+    discount_value INTEGER NOT NULL DEFAULT 0,
+    active         INTEGER NOT NULL DEFAULT 1,
+    usage_limit    INTEGER,                            -- NULL = unlimited
+    used_count     INTEGER NOT NULL DEFAULT 0,
+    created_at     TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS testimonials (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_name TEXT NOT NULL,
+    quote         TEXT NOT NULL,
+    rating        INTEGER NOT NULL DEFAULT 5,
+    position      INTEGER NOT NULL DEFAULT 0,
+    visible       INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS faqs (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    question TEXT NOT NULL,
+    answer   TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    visible  INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    email      TEXT UNIQUE NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
+
+# Safe, additive migrations for databases created before these columns existed.
+# Each entry is (table, column, "ALTER TABLE ... " statement). Errors from
+# already-applied migrations (duplicate column) are ignored on purpose.
+MIGRATIONS = [
+    "ALTER TABLE products ADD COLUMN category TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE orders ADD COLUMN coupon_code TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE orders ADD COLUMN discount_amount INTEGER NOT NULL DEFAULT 0",
+]
 
 DEFAULT_SETTINGS = {
     "site_name": "Atelier",
@@ -98,6 +144,12 @@ def get_db():
 def init_db():
     conn = get_db()
     conn.executescript(SCHEMA)
+
+    for stmt in MIGRATIONS:
+        try:
+            conn.execute(stmt)
+        except sqlite3.OperationalError:
+            pass  # column already exists — already migrated
 
     # Seed default settings (only keys that don't already exist)
     for key, value in DEFAULT_SETTINGS.items():

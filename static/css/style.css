@@ -11,10 +11,11 @@
   --grey-700: #4a4944;
   --border: rgba(10, 10, 10, 0.12);
   --border-invert: rgba(255, 255, 255, 0.18);
-  --serif: "Playfair Display", "Times New Roman", serif;
-  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --serif: "Instrument Serif", "Times New Roman", serif;
+  --sans: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --max-w: 1180px;
   --space: 1rem;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * { box-sizing: border-box; }
@@ -27,6 +28,8 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
+body.has-custom-cursor, body.has-custom-cursor a, body.has-custom-cursor button,
+body.has-custom-cursor input, body.has-custom-cursor textarea { cursor: none; }
 img { max-width: 100%; display: block; }
 a { color: inherit; text-decoration: none; }
 h1, h2, h3, h4 {
@@ -216,3 +219,139 @@ p { margin: 0 0 1em; color: var(--grey-700); }
   .admin-main { padding: 1.5rem; }
   .nav__links { display: none; }
 }
+
+/* ============================================================
+   Motion — scroll reveals, cursor, magnetic buttons, marquee
+   ============================================================ */
+
+/* Scroll progress bar */
+.scroll-progress {
+  position: fixed; top: 0; left: 0; height: 2px; width: 0%;
+  background: var(--black); z-index: 9999;
+  transition: width 0.12s linear;
+}
+
+/* Sticky nav shrinks slightly once you scroll */
+.nav { transition: box-shadow 0.3s ease; }
+.nav.scrolled { box-shadow: 0 1px 0 var(--border); }
+.nav.scrolled .container { padding-top: 0.75rem; padding-bottom: 0.75rem; transition: padding 0.3s ease; }
+.nav .container { transition: padding 0.3s ease; }
+
+/* Generic scroll-reveal: fades + rises into place once visible */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.8s var(--ease), transform 0.8s var(--ease);
+  transition-delay: calc(var(--i, 0) * 70ms);
+}
+.reveal.is-visible { opacity: 1; transform: none; }
+
+/* Hero — staggered fade-up on first load, no JS needed */
+@keyframes heroFadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+.hero__rule, .hero .eyebrow, .hero h1, .hero p, .hero .btn {
+  opacity: 0;
+  animation: heroFadeUp 1s var(--ease) forwards;
+}
+.hero__rule { animation-delay: 0.02s; }
+.hero .eyebrow { animation-delay: 0.12s; }
+.hero h1 { animation-delay: 0.24s; }
+.hero p { animation-delay: 0.4s; }
+.hero .btn { animation-delay: 0.55s; }
+
+/* Custom cursor — desktop with a real mouse only */
+.cursor-dot, .cursor-ring {
+  position: fixed; top: 0; left: 0; pointer-events: none; z-index: 10000;
+  border-radius: 50%; transform: translate(-50%, -50%);
+}
+.cursor-dot { width: 6px; height: 6px; background: var(--black); }
+.cursor-ring {
+  width: 34px; height: 34px; border: 1px solid var(--black); opacity: 0.55;
+  transition: width 0.25s var(--ease), height 0.25s var(--ease), opacity 0.25s ease, border-color 0.25s ease;
+}
+.cursor-ring.hovering { width: 54px; height: 54px; opacity: 0.9; }
+@media (hover: none), (pointer: coarse) {
+  .cursor-dot, .cursor-ring { display: none !important; }
+  body.has-custom-cursor, body.has-custom-cursor a, body.has-custom-cursor button { cursor: auto; }
+}
+
+/* Magnetic buttons — subtle pull toward the cursor */
+.btn { transition: background 0.2s ease, color 0.2s ease, transform 0.25s var(--ease); }
+
+/* Marquee strip */
+.marquee {
+  overflow: hidden; white-space: nowrap;
+  background: var(--black); color: var(--white);
+  border-top: 1px solid var(--border-invert); border-bottom: 1px solid var(--border-invert);
+  padding: 0.85rem 0;
+}
+.marquee__track { display: inline-flex; animation: marqueeScroll 26s linear infinite; }
+.marquee__track span {
+  display: inline-block; padding: 0 2.25rem;
+  font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--grey-300);
+}
+@keyframes marqueeScroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* Product gallery crossfade */
+.product-gallery__main img { transition: opacity 0.22s ease; }
+
+/* Admin: simple, non-distracting fade-in (no cursor/magnetic effects — keeps forms precise) */
+@keyframes adminFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.admin-main { animation: adminFadeIn 0.35s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .hero__rule, .hero .eyebrow, .hero h1, .hero p, .hero .btn,
+  .marquee__track, .admin-main {
+    animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important;
+  }
+}
+
+/* ============================================================
+   Category filters, testimonials, FAQ, newsletter
+   ============================================================ */
+
+.filter-tabs {
+  display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center; margin-bottom: 3rem;
+}
+.filter-tab {
+  padding: 0.5rem 1.1rem; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase;
+  border: 1px solid var(--border); border-radius: 999px; transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.filter-tab:hover { border-color: var(--black); }
+.filter-tab.active { background: var(--black); color: var(--white); border-color: var(--black); }
+
+.card__category {
+  font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--grey-500);
+  margin-bottom: 0.3rem;
+}
+
+.testimonial-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem; }
+.testimonial-card { border: 1px solid var(--border-invert); padding: 2rem; border-radius: 3px; }
+.testimonial-stars { color: var(--white); letter-spacing: 0.15em; margin-bottom: 1rem; font-size: 0.9rem; }
+.testimonial-quote { font-family: var(--serif); font-size: 1.2rem; color: var(--white); line-height: 1.5; margin-bottom: 1.25rem; }
+.testimonial-name { font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--grey-500); }
+
+.faq-list { display: flex; flex-direction: column; gap: 0; }
+.faq-item { border-bottom: 1px solid var(--border); padding: 1.4rem 0; }
+.faq-item summary {
+  cursor: pointer; font-family: var(--serif); font-size: 1.15rem; list-style: none;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::after { content: "+"; font-size: 1.4rem; color: var(--grey-500); transition: transform 0.25s ease; }
+.faq-item[open] summary::after { content: "\2212"; }
+.faq-answer { padding-top: 1rem; white-space: pre-line; }
+
+.newsletter-form { display: flex; gap: 0.75rem; }
+.newsletter-form input {
+  flex: 1; padding: 0.85rem 1rem; border: 1px solid var(--border-invert); background: transparent;
+  color: var(--white); border-radius: 2px; font-family: var(--sans); font-size: 0.95rem;
+}
+.newsletter-form input::placeholder { color: var(--grey-500); }
+.newsletter-form input:focus { outline: none; border-color: var(--white); }
+@media (max-width: 560px) { .newsletter-form { flex-direction: column; } }
