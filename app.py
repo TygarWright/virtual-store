@@ -9,8 +9,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 import config
 import database as db
 from helpers import (
-    login_required, get_csrf_token, check_csrf, slugify,
+    login_required, get_csrf_token, check_csrf, check_csrf_api, slugify,
     save_product_image, delete_file_quietly, send_email, email_enabled,
+    rate_limited, turnstile_enabled, verify_turnstile,
 )
 import razorpay_client as rzp
 
@@ -36,7 +37,12 @@ def set_security_headers(response):
 def inject_globals():
     cart = session.get("cart", {})
     cart_count = sum(cart.values()) if cart else 0
-    return {"csrf_token": get_csrf_token, "cart_count": cart_count}
+    return {
+        "csrf_token": get_csrf_token,
+        "cart_count": cart_count,
+        "turnstile_enabled": turnstile_enabled(),
+        "turnstile_site_key": config.TURNSTILE_SITE_KEY,
+    }
 
 
 def get_cart_items(conn):
@@ -191,6 +197,10 @@ def product_detail(slug):
 
 @app.route("/api/create-order", methods=["POST"])
 def api_create_order():
+    check_csrf_api()
+    if rate_limited("create-order", max_attempts=8, window_seconds=60):
+        return jsonify({"error": "Too many attempts — please wait a minute and try again."}), 429
+
     data = request.get_json(force=True, silent=True) or {}
     product_id = data.get("product_id")
     name = (data.get("name") or "").strip()
@@ -289,6 +299,9 @@ def view_cart():
 
 @app.route("/cart/add", methods=["POST"])
 def cart_add():
+    check_csrf_api()
+    if rate_limited("cart-add", max_attempts=40, window_seconds=60):
+        return jsonify({"error": "Too many requests — please slow down."}), 429
     product_id = request.form.get("product_id") or (request.get_json(silent=True) or {}).get("product_id")
     try:
         qty = max(1, int(request.form.get("quantity", 1)))
@@ -318,6 +331,7 @@ def cart_add():
 
 @app.route("/cart/update", methods=["POST"])
 def cart_update():
+    check_csrf()
     product_id = str(request.form.get("product_id", ""))
     try:
         qty = int(request.form.get("quantity", 1))
@@ -336,6 +350,7 @@ def cart_update():
 
 @app.route("/cart/remove/<int:product_id>", methods=["POST"])
 def cart_remove(product_id):
+    check_csrf()
     cart = session.get("cart", {})
     cart.pop(str(product_id), None)
     session["cart"] = cart
@@ -346,6 +361,7 @@ def cart_remove(product_id):
 
 @app.route("/cart/clear", methods=["POST"])
 def cart_clear():
+    check_csrf()
     session["cart"] = {}
     session.modified = True
     return redirect(url_for("view_cart"))
@@ -353,6 +369,9 @@ def cart_clear():
 
 @app.route("/api/cart/apply-coupon", methods=["POST"])
 def api_cart_apply_coupon():
+    check_csrf_api()
+    if rate_limited("apply-coupon", max_attempts=15, window_seconds=60):
+        return jsonify({"error": "Too many attempts — please wait a minute and try again."}), 429
     data = request.get_json(force=True, silent=True) or {}
     code = (data.get("code") or "").strip().upper()
     conn = db.get_db()
@@ -377,6 +396,9 @@ def api_cart_apply_coupon():
 
 @app.route("/api/cart/create-order", methods=["POST"])
 def api_cart_create_order():
+    check_csrf_api()
+    if rate_limited("create-order", max_attempts=8, window_seconds=60):
+        return jsonify({"error": "Too many attempts — please wait a minute and try again."}), 429
     data = request.get_json(force=True, silent=True) or {}
     name = (data.get("name") or "").strip()
     email = (data.get("email") or "").strip()
@@ -461,6 +483,9 @@ def api_cart_create_order():
 
 @app.route("/api/apply-coupon", methods=["POST"])
 def api_apply_coupon():
+    check_csrf_api()
+    if rate_limited("apply-coupon", max_attempts=15, window_seconds=60):
+        return jsonify({"error": "Too many attempts — please wait a minute and try again."}), 429
     data = request.get_json(force=True, silent=True) or {}
     code = (data.get("code") or "").strip().upper()
     product_id = data.get("product_id")
@@ -487,6 +512,7 @@ def api_apply_coupon():
 
 @app.route("/api/verify-payment", methods=["POST"])
 def api_verify_payment():
+    check_csrf_api()
     data = request.get_json(force=True, silent=True) or {}
     rzp_order_id = data.get("razorpay_order_id")
     rzp_payment_id = data.get("razorpay_payment_id")
@@ -494,8 +520,6 @@ def api_verify_payment():
 
     if not all([rzp_order_id, rzp_payment_id, rzp_signature]):
         return jsonify({"error": "Missing payment details."}), 400
-
-    valid = rzp.verify_payment_signature(rzp_order_id, rzp_payment_id, rzp_signature)
 
     conn = db.get_db()
     order = conn.execute(
@@ -505,6 +529,16 @@ def api_verify_payment():
     if not order:
         conn.close()
         return jsonify({"error": "Order not found."}), 404
+
+    # Idempotency guard: if this order was already confirmed paid (or moved
+    # further, e.g. delivered), don't re-run any of the side effects below —
+    # a retried/replayed call just gets the same success response again,
+    # without double-crediting coupon usage or re-sending the confirmation email.
+    if order["status"] in ("paid", "delivered"):
+        conn.close()
+        return jsonify({"success": True, "order_ref": order["order_ref"]})
+
+    valid = rzp.verify_payment_signature(rzp_order_id, rzp_payment_id, rzp_signature)
 
     if not valid:
         conn.execute(
@@ -601,6 +635,13 @@ def track_order():
 
 @app.route("/newsletter/subscribe", methods=["POST"])
 def newsletter_subscribe():
+    check_csrf()
+    if rate_limited("newsletter", max_attempts=5, window_seconds=60):
+        flash("Too many attempts — please wait a minute and try again.", "error")
+        return redirect(url_for("home") + "#newsletter")
+    if turnstile_enabled() and not verify_turnstile(request.form.get("cf-turnstile-response", "")):
+        flash("Please complete the verification and try again.", "error")
+        return redirect(url_for("home") + "#newsletter")
     email = (request.form.get("email") or "").strip().lower()
     if not email or "@" not in email:
         flash("Please enter a valid email address.", "error")
@@ -656,6 +697,12 @@ def not_found(e):
 def admin_login():
     if request.method == "POST":
         check_csrf()
+        if rate_limited("admin-login", max_attempts=8, window_seconds=300):
+            flash("Too many login attempts — please wait a few minutes and try again.", "error")
+            return render_template("admin/login.html")
+        if turnstile_enabled() and not verify_turnstile(request.form.get("cf-turnstile-response", "")):
+            flash("Please complete the verification and try again.", "error")
+            return render_template("admin/login.html")
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         conn = db.get_db()
@@ -672,8 +719,10 @@ def admin_login():
     return render_template("admin/login.html")
 
 
-@app.route("/admin/logout")
+@app.route("/admin/logout", methods=["POST"])
+@login_required
 def admin_logout():
+    check_csrf()
     session.clear()
     return redirect(url_for("admin_login"))
 

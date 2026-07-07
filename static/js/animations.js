@@ -1,3 +1,10 @@
+// Shared helper: reads the CSRF token from the page's meta tag so any
+// fetch() call across the site can include it as a header.
+window.getCsrfToken = function () {
+  var meta = document.querySelector('meta[name="csrf-token"]');
+  return meta ? meta.getAttribute("content") : "";
+};
+
 (function () {
   "use strict";
 

@@ -24,7 +24,10 @@
       <div class="divider-light"></div>
       <a href="{{ url_for('home') }}" target="_blank">View Live Site ↗</a>
       <a href="{{ url_for('admin_account') }}" class="{{ 'active' if request.endpoint == 'admin_account' }}">My Account</a>
-      <a href="{{ url_for('admin_logout') }}">Log Out</a>
+      <form method="POST" action="{{ url_for('admin_logout') }}" style="margin:0;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="admin-nav__logout-btn">Log Out</button>
+      </form>
     </nav>
   </aside>
   <main class="admin-main">
