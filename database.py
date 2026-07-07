@@ -6,7 +6,7 @@ import sqlite3
 import os
 import secrets
 import string
-from datetime import datetime, timezone
+from datetime import datetime
 from werkzeug.security import generate_password_hash
 
 import config
@@ -170,38 +170,13 @@ def init_db():
     # Seed a default admin user, only if none exists yet
     existing = conn.execute("SELECT COUNT(*) AS c FROM admin_users").fetchone()["c"]
     if existing == 0:
-        password = config.DEFAULT_ADMIN_PASSWORD
-        generated = False
-        if not password:
-            # No ADMIN_PASSWORD env var set — generate one instead of using a
-            # predictable default, and write it somewhere only the site owner
-            # can read it.
-            password = secrets.token_urlsafe(12)
-            generated = True
         conn.execute(
             "INSERT INTO admin_users (username, password_hash) VALUES (?, ?)",
-            (config.DEFAULT_ADMIN_USERNAME, generate_password_hash(password)),
+            (
+                config.DEFAULT_ADMIN_USERNAME,
+                generate_password_hash(config.DEFAULT_ADMIN_PASSWORD),
+            ),
         )
-        if generated:
-            try:
-                path = os.path.join(os.path.dirname(config.DB_PATH) or ".", "INITIAL_ADMIN_PASSWORD.txt")
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(
-                        "No ADMIN_PASSWORD was set, so this one was generated automatically.\n"
-                        f"Username: {config.DEFAULT_ADMIN_USERNAME}\n"
-                        f"Password: {password}\n\n"
-                        "Log in once with this, then change it immediately from "
-                        "My Account in the admin panel. Delete this file afterwards.\n"
-                    )
-            except OSError:
-                pass
-            print(
-                f"\n[first run] No ADMIN_PASSWORD set — generated one for you:\n"
-                f"  Username: {config.DEFAULT_ADMIN_USERNAME}\n"
-                f"  Password: {password}\n"
-                f"  (also saved to instance/INITIAL_ADMIN_PASSWORD.txt)\n"
-                f"  Please log in and change it right away.\n"
-            )
 
     conn.commit()
     conn.close()
@@ -216,4 +191,4 @@ def new_order_ref():
 
 
 def now():
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.utcnow().isoformat()

@@ -1,10 +1,3 @@
-// Shared helper: reads the CSRF token from the page's meta tag so any
-// fetch() call across the site can include it as a header.
-window.getCsrfToken = function () {
-  var meta = document.querySelector('meta[name="csrf-token"]');
-  return meta ? meta.getAttribute("content") : "";
-};
-
 (function () {
   "use strict";
 
@@ -111,45 +104,16 @@ window.getCsrfToken = function () {
   var navToggle = document.getElementById("navToggle");
   var mobileMenu = document.getElementById("mobileMenu");
   if (navToggle && mobileMenu) {
-    var closeMenu = function () {
-      mobileMenu.classList.remove("open");
-      navToggle.setAttribute("aria-expanded", "false");
-      navToggle.setAttribute("aria-label", "Open menu");
-      document.body.classList.remove("menu-open");
-    };
-    var openMenu = function () {
-      mobileMenu.classList.add("open");
-      navToggle.setAttribute("aria-expanded", "true");
-      navToggle.setAttribute("aria-label", "Close menu");
-      document.body.classList.add("menu-open");
-    };
-    navToggle.addEventListener("click", function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (mobileMenu.classList.contains("open")) closeMenu();
-      else openMenu();
+    navToggle.addEventListener("click", function () {
+      var isOpen = mobileMenu.classList.toggle("open");
+      navToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      navToggle.setAttribute("aria-label", isOpen ? "Close menu" : "Open menu");
     });
     mobileMenu.querySelectorAll("a").forEach(function (link) {
-      link.addEventListener("click", closeMenu);
-    });
-    // Tapping/clicking anywhere outside the open menu closes it
-    document.addEventListener("click", function (e) {
-      if (
-        mobileMenu.classList.contains("open") &&
-        !mobileMenu.contains(e.target) &&
-        !navToggle.contains(e.target)
-      ) {
-        closeMenu();
-      }
-    });
-    // Escape closes it too
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && mobileMenu.classList.contains("open")) closeMenu();
-    });
-    // Closing the mobile viewport back out to desktop width shouldn't leave
-    // the menu stuck open behind the (now hidden) toggle button
-    window.addEventListener("resize", function () {
-      if (window.innerWidth > 900 && mobileMenu.classList.contains("open")) closeMenu();
+      link.addEventListener("click", function () {
+        mobileMenu.classList.remove("open");
+        navToggle.setAttribute("aria-expanded", "false");
+      });
     });
   }
 
@@ -167,21 +131,4 @@ window.getCsrfToken = function () {
     });
     if (thumbEl) thumbEl.classList.add("active");
   };
-
-  // ---------- Subtle keystroke pulse ----------
-  // A tiny, elegant flicker of the scroll-progress bar every time a key is
-  // pressed — physical keyboard, phone keyboard, anything that fires
-  // keydown. Throttled so fast typing doesn't spam animations.
-  if (progress) {
-    var keyPulseReady = true;
-    document.addEventListener("keydown", function () {
-      if (!keyPulseReady) return;
-      keyPulseReady = false;
-      progress.classList.add("key-pulse");
-      setTimeout(function () {
-        progress.classList.remove("key-pulse");
-        keyPulseReady = true;
-      }, 260);
-    });
-  }
 })();

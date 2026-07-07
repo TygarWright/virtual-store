@@ -1,16 +1,13 @@
 import os
 import re
-import time
 import secrets
 import smtplib
-import threading
 from email.mime.text import MIMEText
 from functools import wraps
 
-import requests
-from flask import session, redirect, url_for, request, abort, jsonify
+from flask import session, redirect, url_for, request, abort
 from werkzeug.utils import secure_filename
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 
 import config
 
@@ -27,10 +24,6 @@ def login_required(view):
 
 
 # ---------- CSRF (lightweight, no extra dependency) ----------
-# Two flavours: `check_csrf()` for normal HTML <form> POSTs (token comes in
-# the form body), and `check_csrf_api()` for JSON fetch() calls, where the
-# token travels in an `X-CSRF-Token` header instead (forms don't send custom
-# headers, which is exactly why this split exists).
 
 def get_csrf_token():
     if "csrf_token" not in session:
@@ -40,107 +33,8 @@ def get_csrf_token():
 
 def check_csrf():
     token = request.form.get("csrf_token", "")
-    expected = session.get("csrf_token", "")
-    if not token or not expected or not secrets.compare_digest(token, expected):
-        abort(400, description="Your session expired — please refresh and try again.")
-
-
-def check_csrf_api():
-    """For requests made via fetch() rather than a plain form submit — covers
-    JSON bodies (token in body or header) and FormData bodies sent via fetch
-    (token travels as a normal form field there, same as check_csrf())."""
-    token = request.headers.get("X-CSRF-Token", "")
-    if not token:
-        data = request.get_json(silent=True) or {}
-        token = data.get("csrf_token", "")
-    if not token:
-        token = request.form.get("csrf_token", "")
-    expected = session.get("csrf_token", "")
-    if not token or not expected or not secrets.compare_digest(token, expected):
-        response = jsonify({"error": "Your session expired — please refresh the page and try again."})
-        response.status_code = 400
-        abort(response)
-
-
-# ---------- Rate limiting (simple, in-process — no Redis needed) ----------
-# Good enough for a single small instance. Resets on restart, and only tracks
-# this one worker process — not a substitute for a real service at scale, but
-# stops casual scripted abuse of login/checkout/coupon/newsletter endpoints.
-
-_rate_buckets = {}
-_rate_lock = threading.Lock()
-
-
-def _client_ip():
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.remote_addr or "unknown"
-
-
-def rate_limited(key_prefix, max_attempts, window_seconds):
-    """Returns True if the current client has exceeded max_attempts within
-    window_seconds for this key_prefix. Also records the current attempt."""
-    key = f"{key_prefix}:{_client_ip()}"
-    now = time.time()
-    with _rate_lock:
-        bucket = _rate_buckets.setdefault(key, [])
-        # drop anything outside the window
-        cutoff = now - window_seconds
-        while bucket and bucket[0] < cutoff:
-            bucket.pop(0)
-        if len(bucket) >= max_attempts:
-            return True
-        bucket.append(now)
-        # keep the whole structure from growing forever
-        if len(_rate_buckets) > 5000:
-            _rate_buckets.clear()
-        return False
-
-
-def rate_limit(key_prefix, max_attempts, window_seconds):
-    """Decorator form of rate_limited(), for use directly on a route."""
-    def decorator(view):
-        @wraps(view)
-        def wrapped(*args, **kwargs):
-            if rate_limited(key_prefix, max_attempts, window_seconds):
-                if request.is_json or request.path.startswith("/api/"):
-                    return jsonify({"error": "Too many attempts — please wait a minute and try again."}), 429
-                flash_msg = "Too many attempts — please wait a minute and try again."
-                from flask import flash as _flash
-                _flash(flash_msg, "error")
-                return redirect(request.referrer or url_for("home"))
-            return view(*args, **kwargs)
-        return wrapped
-    return decorator
-
-
-# ---------- CAPTCHA (Cloudflare Turnstile — free, no account limits) ----------
-
-def turnstile_enabled():
-    return bool(config.TURNSTILE_SITE_KEY and config.TURNSTILE_SECRET_KEY)
-
-
-def verify_turnstile(token):
-    """Returns True if Turnstile is not configured (so the site works before
-    setup) or if the token is valid. Returns False only on a real failure."""
-    if not turnstile_enabled():
-        return True
-    if not token:
-        return False
-    try:
-        resp = requests.post(
-            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-            data={
-                "secret": config.TURNSTILE_SECRET_KEY,
-                "response": token,
-                "remoteip": _client_ip(),
-            },
-            timeout=8,
-        )
-        return bool(resp.json().get("success"))
-    except Exception:
-        return False
+    if not token or token != session.get("csrf_token"):
+        abort(400, description="Your session expired — please try again.")
 
 
 # ---------- Slugs ----------
@@ -171,38 +65,13 @@ def save_product_image(file_storage):
     if not allowed_image(file_storage.filename):
         raise ValueError("Please upload a PNG, JPG or WEBP image.")
 
-    # Verify this is actually a valid, safe-to-decode image before touching it —
-    # Image.open() alone doesn't fully parse the file, so a corrupt or
-    # disguised upload could otherwise slip through.
-    try:
-        file_storage.stream.seek(0)
-        probe = Image.open(file_storage.stream)
-        probe.verify()
-    except (UnidentifiedImageError, OSError, ValueError):
-        raise ValueError("That file doesn't look like a valid image. Please try a different file.")
-    finally:
-        file_storage.stream.seek(0)
-
     os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
     ext = file_storage.filename.rsplit(".", 1)[-1].lower()
     filename = secure_filename(f"{secrets.token_hex(8)}.{ext}")
     path = os.path.join(config.UPLOAD_FOLDER, filename)
 
     image = Image.open(file_storage)
-    image.load()
-
-    # JPEG has no alpha channel — flatten transparency onto white instead of
-    # letting Pillow error out (or silently corrupt colours) on save.
-    if ext in ("jpg", "jpeg"):
-        if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
-            background = Image.new("RGB", image.size, (255, 255, 255))
-            rgba = image.convert("RGBA")
-            background.paste(rgba, mask=rgba.split()[-1])
-            image = background
-        elif image.mode != "RGB":
-            image = image.convert("RGB")
-    elif image.mode not in ("RGB", "RGBA"):
-        image = image.convert("RGBA" if "A" in image.getbands() else "RGB")
+    image = image.convert("RGB") if image.mode not in ("RGB", "RGBA") else image
 
     w, h = image.size
     longest = max(w, h)
