@@ -366,6 +366,15 @@ p { margin: 0 0 1em; color: var(--grey-700); }
   background: var(--black); z-index: 9999;
   transition: width 0.12s linear;
 }
+/* Tiny elegant flicker on every keystroke (physical or on-screen keyboard) */
+.scroll-progress.key-pulse {
+  height: 3px;
+  box-shadow: 0 0 6px 1px rgba(0,0,0,0.35);
+  transition: height 0.12s ease, box-shadow 0.12s ease;
+}
+
+/* Locks background scroll while the mobile menu is open */
+body.menu-open { overflow: hidden; }
 
 /* Sticky nav shrinks slightly once you scroll */
 .nav { transition: box-shadow 0.3s ease; }

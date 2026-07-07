@@ -40,7 +40,8 @@ def get_csrf_token():
 
 def check_csrf():
     token = request.form.get("csrf_token", "")
-    if not token or token != session.get("csrf_token"):
+    expected = session.get("csrf_token", "")
+    if not token or not expected or not secrets.compare_digest(token, expected):
         abort(400, description="Your session expired — please refresh and try again.")
 
 
@@ -54,7 +55,8 @@ def check_csrf_api():
         token = data.get("csrf_token", "")
     if not token:
         token = request.form.get("csrf_token", "")
-    if not token or token != session.get("csrf_token"):
+    expected = session.get("csrf_token", "")
+    if not token or not expected or not secrets.compare_digest(token, expected):
         response = jsonify({"error": "Your session expired — please refresh the page and try again."})
         response.status_code = 400
         abort(response)

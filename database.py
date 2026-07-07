@@ -6,7 +6,7 @@ import sqlite3
 import os
 import secrets
 import string
-from datetime import datetime
+from datetime import datetime, timezone
 from werkzeug.security import generate_password_hash
 
 import config
@@ -216,4 +216,4 @@ def new_order_ref():
 
 
 def now():
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).isoformat()

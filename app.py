@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import (
     Flask, render_template, request, redirect, url_for, session,
@@ -19,7 +19,23 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = config.SECRET_KEY
 app.config["MAX_CONTENT_LENGTH"] = config.MAX_IMAGE_SIZE_MB * 1024 * 1024 * 6  # a few images per request
 
+# Session cookie hardening — not readable by JS, not sent cross-site, and
+# only sent over HTTPS once deployed behind TLS (off under DEBUG so local
+# http:// testing still works).
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = not config.DEBUG
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
+
 db.init_db()
+
+
+def is_safe_redirect_target(target):
+    """Only allow redirecting to a same-site relative path — blocks
+    open-redirect attacks via a crafted ?next= value."""
+    if not target or not target.startswith("/") or target.startswith("//"):
+        return False
+    return True
 
 
 @app.after_request
@@ -29,6 +45,18 @@ def set_security_headers(response):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers.setdefault(
         "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
+    )
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data:; "
+        "script-src 'self' https://challenges.cloudflare.com; "
+        "frame-src https://challenges.cloudflare.com; "
+        "connect-src 'self'; "
+        "base-uri 'self'; "
+        "object-src 'none'",
     )
     return response
 
@@ -135,7 +163,7 @@ def home():
     ).fetchall()
     conn.close()
 
-    cutoff = (datetime.utcnow() - timedelta(days=14)).isoformat()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
     new_product_ids = {p["id"] for p in products if p["created_at"] and p["created_at"] >= cutoff}
 
     return render_template(
@@ -714,7 +742,8 @@ def admin_login():
             session.clear()
             session["admin_id"] = user["id"]
             session["admin_username"] = user["username"]
-            return redirect(request.args.get("next") or url_for("admin_dashboard"))
+            next_url = request.args.get("next", "")
+            return redirect(next_url if is_safe_redirect_target(next_url) else url_for("admin_dashboard"))
         flash("Incorrect username or password.", "error")
     return render_template("admin/login.html")
 
@@ -752,7 +781,7 @@ def admin_dashboard():
            GROUP BY day"""
     ).fetchall()
     by_day = {r["day"]: r["total"] for r in daily_rows}
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     revenue_trend = []
     for i in range(13, -1, -1):
         day = (today - timedelta(days=i)).isoformat()
