@@ -127,15 +127,77 @@ p { margin: 0 0 1em; color: var(--grey-700); }
 .mobile-menu a { padding: 0.9rem 0; border-bottom: 1px solid var(--border); }
 .mobile-menu.open { display: flex; }
 
+/* ---------- Nav cart icon ---------- */
+.nav__cart { position: relative; display: flex; align-items: center; color: var(--black); flex-shrink: 0; }
+.nav__cart-badge {
+  position: absolute; top: -8px; right: -10px;
+  background: var(--black); color: var(--white);
+  font-size: 0.65rem; line-height: 1; font-weight: 600;
+  min-width: 17px; height: 17px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center; padding: 0 4px;
+}
+
+/* ---------- Toasts ---------- */
+.toast-stack {
+  position: fixed; bottom: 1.25rem; right: 1.25rem; z-index: 100;
+  display: flex; flex-direction: column; gap: 0.6rem; align-items: flex-end;
+}
+.toast {
+  background: var(--black); color: var(--white);
+  padding: 0.8rem 1.1rem; border-radius: 6px; font-size: 0.85rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  opacity: 0; transform: translateY(8px); transition: opacity 0.25s ease, transform 0.25s ease;
+  max-width: 320px;
+}
+.toast--in { opacity: 1; transform: translateY(0); }
+.toast--error { background: #b3261e; }
+@media (max-width: 560px) {
+  .toast-stack { left: 1rem; right: 1rem; align-items: stretch; }
+  .toast { max-width: none; }
+}
+
 /* ---------- Hero ---------- */
-.hero { padding: 7rem 0 5rem; text-align: center; }
+.hero { padding: 7rem 0 5rem; text-align: center; position: relative; overflow: hidden; }
+.hero::before, .hero::after {
+  content: ""; position: absolute; border-radius: 50%; z-index: -1;
+  background: radial-gradient(circle, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 70%);
+  animation: heroDrift 16s ease-in-out infinite alternate;
+}
+.hero::before { width: 420px; height: 420px; top: -120px; left: -140px; }
+.hero::after { width: 380px; height: 380px; bottom: -160px; right: -120px; animation-delay: -8s; }
+@keyframes heroDrift {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(30px, 20px) scale(1.08); }
+}
 .hero h1 { font-size: clamp(2.2rem, 5vw, 3.6rem); white-space: pre-line; max-width: 780px; margin-left:auto; margin-right:auto;}
 .hero p { font-size: 1.05rem; max-width: 560px; margin: 1.2rem auto 2rem; }
 .hero__rule { width: 48px; height: 2px; background: var(--black); margin: 0 auto 1.5rem; }
+.hero__scroll-cue {
+  display: flex; justify-content: center; margin-top: 3rem;
+  animation: heroBounce 2.2s ease-in-out infinite;
+}
+.hero__scroll-cue a { color: var(--grey-500); display: flex; }
+@keyframes heroBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero::before, .hero::after, .hero__scroll-cue { animation: none; }
+}
 
 /* ---------- Product grid ---------- */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2.5rem; }
-.card { display: block; }
+.card { display: block; transition: transform 0.25s var(--ease); }
+.card:hover { transform: translateY(-4px); }
+.card__link { display: block; color: inherit; text-decoration: none; }
+.card__add-form { margin-top: 0.6rem; }
+.card__add-btn {
+  width: 100%; padding: 0.55rem; font-family: var(--sans); font-size: 0.72rem;
+  letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer;
+  background: transparent; border: 1px solid var(--border); color: var(--black);
+  border-radius: 3px; transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+.card__add-btn:hover { background: var(--black); color: var(--white); border-color: var(--black); }
 .card__image {
   aspect-ratio: 4/5; background: var(--grey-100);
   overflow: hidden; margin-bottom: 1rem; position: relative;
@@ -223,6 +285,39 @@ p { margin: 0 0 1em; color: var(--grey-700); }
 
 .card-box { border: 1px solid var(--border); border-radius: 3px; padding: 1.75rem; margin-bottom: 1.5rem; background: var(--white); }
 .card-box h3 { font-size: 1.05rem; margin-bottom: 1rem; }
+
+/* ---------- Dashboard: revenue chart + top products ---------- */
+.dash-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.5rem; }
+.sparkline { width: 100%; height: 90px; color: var(--black); overflow: visible; }
+.sparkline-caption {
+  display: flex; justify-content: space-between; font-size: 0.72rem;
+  color: var(--grey-500); margin-top: 0.5rem;
+}
+.top-products { list-style: none; padding: 0; margin: 0; }
+.top-products li {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 0.6rem 0; border-bottom: 1px solid var(--border); gap: 1rem;
+}
+.top-products li:last-child { border-bottom: none; }
+.top-products__name { font-size: 0.88rem; }
+.top-products__meta { font-size: 0.75rem; color: var(--grey-500); white-space: nowrap; }
+@media (max-width: 760px) { .dash-grid { grid-template-columns: 1fr; } }
+
+/* ---------- Admin bulk action bar ---------- */
+.bulk-bar {
+  display: none; align-items: center; gap: 1rem;
+  background: var(--black); color: var(--white);
+  padding: 0.75rem 1.25rem; border-radius: 4px; margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+.bulk-bar.active { display: flex; }
+.bulk-bar select, .bulk-bar button {
+  font-family: var(--sans); font-size: 0.8rem; padding: 0.4rem 0.75rem;
+  border-radius: 3px; border: 1px solid rgba(255,255,255,0.3);
+  background: transparent; color: var(--white); cursor: pointer;
+}
+.bulk-bar button:hover { background: var(--white); color: var(--black); }
+.bulk-bar select option { color: var(--black); }
 .row-actions { display: flex; gap: 0.5rem; }
 .empty-state { text-align: center; padding: 4rem 1rem; color: var(--grey-500); }
 
@@ -424,6 +519,55 @@ p { margin: 0 0 1em; color: var(--grey-700); }
 .related-products { margin-top: 5rem; }
 .related-products h3 {
   font-size: 1.5rem; margin-bottom: 2rem; text-align: center;
+}
+
+/* ---------- Quantity selector ---------- */
+.qty-selector {
+  display: flex; align-items: center; border: 1px solid var(--border);
+  border-radius: 4px; overflow: hidden; flex-shrink: 0;
+}
+.qty-selector button {
+  background: none; border: none; width: 34px; height: 38px;
+  font-size: 1.1rem; cursor: pointer; color: var(--black);
+}
+.qty-selector button:hover { background: var(--grey-50); }
+.qty-selector input {
+  width: 40px; height: 38px; border: none; border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border); text-align: center; font-family: var(--sans);
+  font-size: 0.9rem; -moz-appearance: textfield;
+}
+.qty-selector input::-webkit-outer-spin-button,
+.qty-selector input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* ---------- Cart page ---------- */
+.cart-layout { display: grid; grid-template-columns: 1.6fr 1fr; gap: 3rem; align-items: start; }
+.cart-items { display: flex; flex-direction: column; gap: 1.5rem; }
+.cart-item {
+  display: grid; grid-template-columns: 70px 1fr auto auto; gap: 1.25rem; align-items: center;
+  padding-bottom: 1.5rem; border-bottom: 1px solid var(--border);
+}
+.cart-item__image { width: 70px; height: 88px; background: var(--grey-50); overflow: hidden; }
+.cart-item__image img { width: 100%; height: 100%; object-fit: cover; }
+.cart-item__name { font-family: var(--serif); font-size: 1.05rem; display: block; margin-bottom: 0.25rem; }
+.cart-item__price { font-size: 0.8rem; color: var(--grey-500); margin-bottom: 0.6rem; }
+.cart-item__total { font-family: var(--serif); font-size: 1.05rem; white-space: nowrap; }
+.cart-item__remove {
+  background: none; border: none; color: var(--grey-500); cursor: pointer;
+  font-size: 1rem; padding: 0.4rem; transition: color 0.2s;
+}
+.cart-item__remove:hover { color: #7a2222; }
+.cart-summary {
+  border: 1px solid var(--border); border-radius: 4px; padding: 1.75rem; position: sticky; top: 6.5rem;
+}
+.cart-summary h3 { font-size: 1.1rem; margin-bottom: 1.25rem; }
+.cart-summary__row {
+  display: flex; justify-content: space-between; font-size: 0.95rem;
+  margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--border);
+}
+@media (max-width: 760px) {
+  .cart-layout { grid-template-columns: 1fr; }
+  .cart-item { grid-template-columns: 60px 1fr auto; grid-template-areas: "img info total" "img info remove"; }
+  .cart-summary { position: static; }
 }
 
 /* ---------- Sticky mobile buy bar ---------- */

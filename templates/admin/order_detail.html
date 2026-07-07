@@ -8,7 +8,22 @@
 
 <div class="card-box">
   <h3>Details</h3>
-  <p><strong>Product:</strong> {{ order.product_name }}</p>
+  {% if order_items %}
+    <p><strong>Items:</strong></p>
+    <table class="table" style="margin-bottom:1rem;">
+      <tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Line Total</th></tr>
+      {% for it in order_items %}
+      <tr>
+        <td>{{ it.product_name }}</td>
+        <td>{{ it.quantity }}</td>
+        <td>₹{{ "{:,}".format(it.unit_price) }}</td>
+        <td>₹{{ "{:,}".format(it.line_total) }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% else %}
+    <p><strong>Product:</strong> {{ order.product_name }}</p>
+  {% endif %}
   <p><strong>Amount:</strong> ₹{{ "{:,}".format(order.amount) }}</p>
   {% if order.coupon_code %}
   <p><strong>Coupon Used:</strong> {{ order.coupon_code }} (saved customer ₹{{ order.discount_amount }})</p>

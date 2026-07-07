@@ -34,7 +34,41 @@ def set_security_headers(response):
 
 @app.context_processor
 def inject_globals():
-    return {"csrf_token": get_csrf_token}
+    cart = session.get("cart", {})
+    cart_count = sum(cart.values()) if cart else 0
+    return {"csrf_token": get_csrf_token, "cart_count": cart_count}
+
+
+def get_cart_items(conn):
+    """Read the session cart, look up live product data, and return a list of
+    {product, quantity, line_total} plus the subtotal. Prices always come from
+    the database, never the client, so a tampered cart can't change what's charged."""
+    cart = session.get("cart", {})
+    items = []
+    subtotal = 0
+    changed = False
+    for pid_str, qty in list(cart.items()):
+        try:
+            pid = int(pid_str)
+            qty = max(1, int(qty))
+        except (TypeError, ValueError):
+            del cart[pid_str]
+            changed = True
+            continue
+        product = conn.execute(
+            "SELECT * FROM products WHERE id = ? AND active = 1", (pid,)
+        ).fetchone()
+        if not product:
+            del cart[pid_str]
+            changed = True
+            continue
+        line_total = product["price"] * qty
+        subtotal += line_total
+        items.append({"product": product, "quantity": qty, "line_total": line_total})
+    if changed:
+        session["cart"] = cart
+        session.modified = True
+    return items, subtotal
 
 
 def get_settings():
@@ -234,6 +268,197 @@ def api_create_order():
     })
 
 
+@app.route("/cart")
+def view_cart():
+    conn = db.get_db()
+    settings = get_settings()
+    items, subtotal = get_cart_items(conn)
+    product_images = {}
+    for it in items:
+        img = conn.execute(
+            "SELECT filename FROM product_images WHERE product_id = ? ORDER BY position ASC LIMIT 1",
+            (it["product"]["id"],),
+        ).fetchone()
+        product_images[it["product"]["id"]] = img["filename"] if img else None
+    conn.close()
+    return render_template(
+        "cart.html", settings=settings, items=items, subtotal=subtotal,
+        product_images=product_images, razorpay_key=config.RAZORPAY_KEY_ID,
+    )
+
+
+@app.route("/cart/add", methods=["POST"])
+def cart_add():
+    product_id = request.form.get("product_id") or (request.get_json(silent=True) or {}).get("product_id")
+    try:
+        qty = max(1, int(request.form.get("quantity", 1)))
+    except (TypeError, ValueError):
+        qty = 1
+    if not product_id:
+        return jsonify({"error": "Missing product."}), 400
+
+    conn = db.get_db()
+    product = conn.execute("SELECT * FROM products WHERE id = ? AND active = 1", (product_id,)).fetchone()
+    conn.close()
+    if not product:
+        return jsonify({"error": "This product is not available."}), 404
+
+    cart = session.get("cart", {})
+    key = str(product["id"])
+    cart[key] = cart.get(key, 0) + qty
+    session["cart"] = cart
+    session.modified = True
+    cart_count = sum(cart.values())
+
+    if request.headers.get("X-Requested-With") == "fetch":
+        return jsonify({"success": True, "cart_count": cart_count, "product_name": product["name"]})
+    flash(f'Added "{product["name"]}" to your cart.', "success")
+    return redirect(request.referrer or url_for("home"))
+
+
+@app.route("/cart/update", methods=["POST"])
+def cart_update():
+    product_id = str(request.form.get("product_id", ""))
+    try:
+        qty = int(request.form.get("quantity", 1))
+    except (TypeError, ValueError):
+        qty = 1
+    cart = session.get("cart", {})
+    if product_id in cart:
+        if qty <= 0:
+            del cart[product_id]
+        else:
+            cart[product_id] = min(qty, 99)
+        session["cart"] = cart
+        session.modified = True
+    return redirect(url_for("view_cart"))
+
+
+@app.route("/cart/remove/<int:product_id>", methods=["POST"])
+def cart_remove(product_id):
+    cart = session.get("cart", {})
+    cart.pop(str(product_id), None)
+    session["cart"] = cart
+    session.modified = True
+    flash("Item removed from cart.", "success")
+    return redirect(url_for("view_cart"))
+
+
+@app.route("/cart/clear", methods=["POST"])
+def cart_clear():
+    session["cart"] = {}
+    session.modified = True
+    return redirect(url_for("view_cart"))
+
+
+@app.route("/api/cart/apply-coupon", methods=["POST"])
+def api_cart_apply_coupon():
+    data = request.get_json(force=True, silent=True) or {}
+    code = (data.get("code") or "").strip().upper()
+    conn = db.get_db()
+    items, subtotal = get_cart_items(conn)
+    coupon = conn.execute("SELECT * FROM coupons WHERE code = ? AND active = 1", (code,)).fetchone()
+    conn.close()
+    if not items:
+        return jsonify({"error": "Your cart is empty."}), 400
+    if not coupon:
+        return jsonify({"error": "That coupon code isn't valid."}), 400
+    if coupon["usage_limit"] is not None and coupon["used_count"] >= coupon["usage_limit"]:
+        return jsonify({"error": "That coupon has already been fully redeemed."}), 400
+
+    if coupon["discount_type"] == "percent":
+        discount = int(round(subtotal * coupon["discount_value"] / 100))
+    else:
+        discount = coupon["discount_value"]
+    discount = max(0, min(discount, subtotal - 1 if subtotal > 0 else 0))
+    final_total = subtotal - discount
+    return jsonify({"success": True, "discount_amount": discount, "final_price": final_total, "code": coupon["code"]})
+
+
+@app.route("/api/cart/create-order", methods=["POST"])
+def api_cart_create_order():
+    data = request.get_json(force=True, silent=True) or {}
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+    phone = (data.get("phone") or "").strip()
+    coupon_code = (data.get("coupon_code") or "").strip().upper()
+
+    if not all([name, email]):
+        return jsonify({"error": "Please fill in your name and email."}), 400
+
+    conn = db.get_db()
+    items, subtotal = get_cart_items(conn)
+    if not items:
+        conn.close()
+        return jsonify({"error": "Your cart is empty."}), 400
+
+    if not rzp.is_configured():
+        conn.close()
+        return jsonify({"error": "Payments are not configured yet. Please contact the site owner."}), 503
+
+    final_amount = subtotal
+    discount_amount = 0
+    applied_code = ""
+    if coupon_code:
+        coupon = conn.execute(
+            "SELECT * FROM coupons WHERE code = ? AND active = 1", (coupon_code,)
+        ).fetchone()
+        if not coupon:
+            conn.close()
+            return jsonify({"error": "That coupon code isn't valid."}), 400
+        if coupon["usage_limit"] is not None and coupon["used_count"] >= coupon["usage_limit"]:
+            conn.close()
+            return jsonify({"error": "That coupon has already been fully redeemed."}), 400
+        if coupon["discount_type"] == "percent":
+            discount_amount = int(round(subtotal * coupon["discount_value"] / 100))
+        else:
+            discount_amount = coupon["discount_value"]
+        discount_amount = max(0, min(discount_amount, subtotal - 1 if subtotal > 0 else 0))
+        final_amount = subtotal - discount_amount
+        applied_code = coupon["code"]
+
+    order_ref = db.new_order_ref()
+    try:
+        rzp_order = rzp.create_order(final_amount, receipt=order_ref)
+    except Exception:
+        conn.close()
+        return jsonify({"error": "Could not start payment. Please try again."}), 502
+
+    item_count = sum(it["quantity"] for it in items)
+    summary_name = items[0]["product"]["name"] if len(items) == 1 else f"{item_count} items ({len(items)} products)"
+
+    cur = conn.execute(
+        """INSERT INTO orders
+           (order_ref, product_id, product_name, customer_name, customer_email,
+            customer_phone, amount, coupon_code, discount_amount, razorpay_order_id, status, created_at)
+           VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'created', ?)""",
+        (order_ref, summary_name, name, email, phone,
+         final_amount, applied_code, discount_amount, rzp_order["id"], db.now()),
+    )
+    order_id = cur.lastrowid
+    for it in items:
+        conn.execute(
+            """INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity, line_total)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (order_id, it["product"]["id"], it["product"]["name"], it["product"]["price"],
+             it["quantity"], it["line_total"]),
+        )
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "razorpay_order_id": rzp_order["id"],
+        "razorpay_key": config.RAZORPAY_KEY_ID,
+        "amount": rzp_order["amount"],
+        "currency": rzp_order["currency"],
+        "order_ref": order_ref,
+        "product_name": summary_name,
+        "customer_name": name,
+        "customer_email": email,
+        "customer_phone": phone,
+    })
+
+
 @app.route("/api/apply-coupon", methods=["POST"])
 def api_apply_coupon():
     data = request.get_json(force=True, silent=True) or {}
@@ -299,16 +524,33 @@ def api_verify_payment():
             "UPDATE coupons SET used_count = used_count + 1 WHERE code = ?",
             (order["coupon_code"],),
         )
+    order_items = conn.execute(
+        "SELECT * FROM order_items WHERE order_id = ?", (order["id"],)
+    ).fetchall()
     conn.commit()
     conn.close()
 
+    if order_items:
+        session["cart"] = {}
+        session.modified = True
+
     if email_enabled():
+        if order_items:
+            lines = "\n".join(
+                f"  - {it['product_name']} x{it['quantity']} — "
+                f"{'{:,}'.format(it['line_total'])}"
+                for it in order_items
+            )
+            item_block = f"Items:\n{lines}\n\n"
+        else:
+            item_block = f"Item: {order['product_name']}\n\n"
         send_email(
             order["customer_email"],
             f"We've received your order {order['order_ref']}",
             f"Hi {order['customer_name']},\n\n"
-            f"Thank you for your purchase of \"{order['product_name']}\".\n"
+            f"Thank you for your order.\n"
             f"Your payment has been received and your order is now being prepared.\n\n"
+            f"{item_block}"
             f"Order reference: {order['order_ref']}\n"
             f"You can check its status any time at our order tracking page.\n\n"
             f"We'll be in touch shortly.",
@@ -341,12 +583,19 @@ def track_order():
             "SELECT * FROM orders WHERE order_ref = ? AND lower(customer_email) = ?",
             (order_ref, email),
         ).fetchone()
+        order_items = []
+        if order:
+            order_items = conn.execute(
+                "SELECT * FROM order_items WHERE order_id = ?", (order["id"],)
+            ).fetchall()
         conn.close()
+    else:
+        order_items = []
 
     settings = get_settings()
     return render_template(
         "order_status.html", settings=settings, order=order, searched=searched,
-        prefill_ref=prefill_ref, prefill_email=prefill_email,
+        prefill_ref=prefill_ref, prefill_email=prefill_email, order_items=order_items,
     )
 
 
@@ -446,9 +695,31 @@ def admin_dashboard():
     recent_orders = conn.execute(
         "SELECT * FROM orders ORDER BY id DESC LIMIT 8"
     ).fetchall()
+
+    # Revenue for each of the last 14 days, for a simple sparkline
+    daily_rows = conn.execute(
+        """SELECT substr(paid_at, 1, 10) AS day, SUM(amount) AS total
+           FROM orders WHERE status IN ('paid','delivered') AND paid_at IS NOT NULL
+           GROUP BY day"""
+    ).fetchall()
+    by_day = {r["day"]: r["total"] for r in daily_rows}
+    today = datetime.utcnow().date()
+    revenue_trend = []
+    for i in range(13, -1, -1):
+        day = (today - timedelta(days=i)).isoformat()
+        revenue_trend.append({"day": day, "total": by_day.get(day, 0)})
+
+    top_products = conn.execute(
+        """SELECT product_name, COUNT(*) AS orders_count, SUM(line_total) AS revenue
+           FROM order_items GROUP BY product_name ORDER BY revenue DESC LIMIT 5"""
+    ).fetchall()
+
     conn.close()
-    return render_template("admin/dashboard.html", stats=stats, recent_orders=recent_orders,
-                            razorpay_configured=rzp.is_configured())
+    return render_template(
+        "admin/dashboard.html", stats=stats, recent_orders=recent_orders,
+        razorpay_configured=rzp.is_configured(),
+        revenue_trend=revenue_trend, top_products=top_products,
+    )
 
 
 # ============================================================= ADMIN: SITE SETTINGS
@@ -670,6 +941,39 @@ def _save_product(product_id):
     return redirect(url_for("admin_product_edit", product_id=product_id))
 
 
+@app.route("/admin/products/bulk", methods=["POST"])
+@login_required
+def admin_products_bulk():
+    check_csrf()
+    action = request.form.get("action", "")
+    ids = request.form.getlist("product_ids")
+    if not ids:
+        flash("Select at least one product first.", "error")
+        return redirect(url_for("admin_products"))
+
+    conn = db.get_db()
+    placeholders = ",".join("?" * len(ids))
+    if action == "activate":
+        conn.execute(f"UPDATE products SET active = 1 WHERE id IN ({placeholders})", ids)
+        flash(f"Activated {len(ids)} product(s).", "success")
+    elif action == "deactivate":
+        conn.execute(f"UPDATE products SET active = 0 WHERE id IN ({placeholders})", ids)
+        flash(f"Deactivated {len(ids)} product(s).", "success")
+    elif action == "delete":
+        rows = conn.execute(
+            f"SELECT filename FROM product_images WHERE product_id IN ({placeholders})", ids
+        ).fetchall()
+        for r in rows:
+            delete_file_quietly(r["filename"])
+        conn.execute(f"DELETE FROM products WHERE id IN ({placeholders})", ids)
+        flash(f"Deleted {len(ids)} product(s).", "success")
+    else:
+        flash("Unknown bulk action.", "error")
+    conn.commit()
+    conn.close()
+    return redirect(url_for("admin_products"))
+
+
 @app.route("/admin/products/delete/<int:product_id>", methods=["POST"])
 @login_required
 def admin_product_delete(product_id):
@@ -710,15 +1014,21 @@ def admin_product_image_delete(image_id):
 @login_required
 def admin_orders():
     status_filter = request.args.get("status", "")
+    q = (request.args.get("q") or "").strip()
     conn = db.get_db()
+    clauses = []
+    params = []
     if status_filter:
-        orders = conn.execute(
-            "SELECT * FROM orders WHERE status = ? ORDER BY id DESC", (status_filter,)
-        ).fetchall()
-    else:
-        orders = conn.execute("SELECT * FROM orders ORDER BY id DESC").fetchall()
+        clauses.append("status = ?")
+        params.append(status_filter)
+    if q:
+        clauses.append("(order_ref LIKE ? OR customer_name LIKE ? OR customer_email LIKE ?)")
+        like = f"%{q}%"
+        params += [like, like, like]
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    orders = conn.execute(f"SELECT * FROM orders {where} ORDER BY id DESC", params).fetchall()
     conn.close()
-    return render_template("admin/orders.html", orders=orders, status_filter=status_filter)
+    return render_template("admin/orders.html", orders=orders, status_filter=status_filter, q=q)
 
 
 @app.route("/admin/orders/<int:order_id>")
@@ -726,10 +1036,14 @@ def admin_orders():
 def admin_order_detail(order_id):
     conn = db.get_db()
     order = conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
+    order_items = conn.execute(
+        "SELECT * FROM order_items WHERE order_id = ?", (order_id,)
+    ).fetchall() if order else []
     conn.close()
     if not order:
         abort(404)
-    return render_template("admin/order_detail.html", order=order, email_enabled=email_enabled())
+    return render_template("admin/order_detail.html", order=order, order_items=order_items,
+                            email_enabled=email_enabled())
 
 
 @app.route("/admin/orders/<int:order_id>/deliver", methods=["POST"])
@@ -742,6 +1056,9 @@ def admin_order_deliver(order_id):
     if not order:
         conn.close()
         abort(404)
+    order_items = conn.execute(
+        "SELECT * FROM order_items WHERE order_id = ?", (order_id,)
+    ).fetchall()
     conn.execute(
         "UPDATE orders SET status = 'delivered', delivery_message = ?, delivered_at = ? WHERE id = ?",
         (message, db.now(), order_id),
@@ -750,11 +1067,14 @@ def admin_order_deliver(order_id):
     conn.close()
 
     if email_enabled():
+        item_line = order["product_name"] if not order_items else ", ".join(
+            f"{it['product_name']} x{it['quantity']}" for it in order_items
+        )
         send_email(
             order["customer_email"],
             f"Your order {order['order_ref']} has been delivered",
             f"Hi {order['customer_name']},\n\n"
-            f"Great news — your order for \"{order['product_name']}\" is ready!\n\n"
+            f"Great news — your order for \"{item_line}\" is ready!\n\n"
             f"{message}\n\n"
             f"Order reference: {order['order_ref']}\n\nThank you for shopping with us.",
         )
@@ -1002,16 +1322,25 @@ def admin_orders_export():
     import io
     conn = db.get_db()
     orders = conn.execute("SELECT * FROM orders ORDER BY id DESC").fetchall()
+    all_items = conn.execute("SELECT * FROM order_items ORDER BY order_id ASC").fetchall()
     conn.close()
+    items_by_order = {}
+    for it in all_items:
+        items_by_order.setdefault(it["order_id"], []).append(it)
+
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow([
-        "Order Ref", "Product", "Customer Name", "Email", "Phone", "Amount",
+        "Order Ref", "Items", "Customer Name", "Email", "Phone", "Amount",
         "Coupon", "Discount", "Status", "Created", "Paid", "Delivered",
     ])
     for o in orders:
+        items = items_by_order.get(o["id"])
+        item_summary = o["product_name"] if not items else "; ".join(
+            f"{it['product_name']} x{it['quantity']}" for it in items
+        )
         writer.writerow([
-            o["order_ref"], o["product_name"], o["customer_name"], o["customer_email"],
+            o["order_ref"], item_summary, o["customer_name"], o["customer_email"],
             o["customer_phone"], o["amount"], o["coupon_code"], o["discount_amount"],
             o["status"], o["created_at"], o["paid_at"], o["delivered_at"],
         ])

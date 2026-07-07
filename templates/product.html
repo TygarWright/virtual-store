@@ -65,6 +65,17 @@
       <div class="divider"></div>
       <div class="product-description">{{ product.description }}</div>
 
+      <form class="add-to-cart-form" action="{{ url_for('cart_add') }}" method="POST" style="display:flex; gap:0.75rem; align-items:center; margin-bottom:1.25rem;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="product_id" value="{{ product.id }}">
+        <div class="qty-selector">
+          <button type="button" onclick="this.nextElementSibling.stepDown(); this.nextElementSibling.dispatchEvent(new Event('change'));" aria-label="Decrease quantity">−</button>
+          <input type="number" name="quantity" value="1" min="1" max="99" aria-label="Quantity">
+          <button type="button" onclick="this.previousElementSibling.stepUp(); this.previousElementSibling.dispatchEvent(new Event('change'));" aria-label="Increase quantity">+</button>
+        </div>
+        <button type="submit" class="btn btn--outline" style="flex:1;">Add to Cart</button>
+      </form>
+
       <div id="buyForm">
         <div class="field">
           <label>Full Name</label>
@@ -120,18 +131,26 @@
     <h3>You May Also Like</h3>
     <div class="grid">
       {% for r in related %}
-      <a class="card" href="{{ url_for('product_detail', slug=r.slug) }}">
-        <div class="card__image">
-          {% if related_images[r.id] %}
-            <img src="{{ url_for('static', filename='uploads/' ~ related_images[r.id]) }}" alt="{{ r.name }}" loading="lazy" width="400" height="500">
-          {% else %}
-            <div class="card__placeholder">{{ r.name[0]|upper }}</div>
-          {% endif %}
-        </div>
-        {% if r.category %}<div class="card__category">{{ r.category }}</div>{% endif %}
-        <div class="card__title">{{ r.name }}</div>
-        <div class="card__price">{{ settings.currency_symbol }}{{ "{:,}".format(r.price) }}</div>
-      </a>
+      <div class="card">
+        <a class="card__link" href="{{ url_for('product_detail', slug=r.slug) }}">
+          <div class="card__image">
+            {% if related_images[r.id] %}
+              <img src="{{ url_for('static', filename='uploads/' ~ related_images[r.id]) }}" alt="{{ r.name }}" loading="lazy" width="400" height="500">
+            {% else %}
+              <div class="card__placeholder">{{ r.name[0]|upper }}</div>
+            {% endif %}
+          </div>
+          {% if r.category %}<div class="card__category">{{ r.category }}</div>{% endif %}
+          <div class="card__title">{{ r.name }}</div>
+          <div class="card__price">{{ settings.currency_symbol }}{{ "{:,}".format(r.price) }}</div>
+        </a>
+        <form class="add-to-cart-form card__add-form" action="{{ url_for('cart_add') }}" method="POST">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="product_id" value="{{ r.id }}">
+          <input type="hidden" name="quantity" value="1">
+          <button type="submit" class="card__add-btn">+ Add to Cart</button>
+        </form>
+      </div>
       {% endfor %}
     </div>
   </div>

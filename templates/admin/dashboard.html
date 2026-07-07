@@ -24,6 +24,48 @@
 </div>
 {% endif %}
 
+<div class="dash-grid">
+  <div class="card-box">
+    <h3>Revenue — Last 14 Days</h3>
+    {% set max_total = (revenue_trend|map(attribute='total')|max) or 1 %}
+    <svg class="sparkline" viewBox="0 0 280 90" preserveAspectRatio="none" role="img" aria-label="Revenue trend for the last 14 days">
+      {% set points = [] %}
+      {% for d in revenue_trend %}
+        {% set x = (loop.index0 / (revenue_trend|length - 1)) * 280 if revenue_trend|length > 1 else 0 %}
+        {% set y = 85 - ((d.total / max_total) * 75 if max_total else 0) %}
+        {% if points.append((x, y)) %}{% endif %}
+      {% endfor %}
+      <polyline
+        fill="none" stroke="currentColor" stroke-width="2"
+        points="{% for p in points %}{{ '%.1f'|format(p[0]) }},{{ '%.1f'|format(p[1]) }}{% if not loop.last %} {% endif %}{% endfor %}" />
+      {% for p in points %}
+        <circle cx="{{ '%.1f'|format(p[0]) }}" cy="{{ '%.1f'|format(p[1]) }}" r="2.5" fill="currentColor"></circle>
+      {% endfor %}
+    </svg>
+    <div class="sparkline-caption">
+      <span>{{ revenue_trend[0].day[5:] if revenue_trend }}</span>
+      <span>Peak day: ₹{{ "{:,}".format(max_total) }}</span>
+      <span>{{ revenue_trend[-1].day[5:] if revenue_trend }}</span>
+    </div>
+  </div>
+
+  <div class="card-box">
+    <h3>Top Products</h3>
+    {% if top_products %}
+    <ul class="top-products">
+      {% for p in top_products %}
+      <li>
+        <span class="top-products__name">{{ p.product_name }}</span>
+        <span class="top-products__meta">{{ p.orders_count }} order{{ 's' if p.orders_count != 1 else '' }} · ₹{{ "{:,}".format(p.revenue) }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty-state" style="padding:1.5rem 0;">No sales yet.</div>
+    {% endif %}
+  </div>
+</div>
+
 <h3 style="margin-top:2.5rem;">Recent Orders</h3>
 {% if recent_orders %}
 <table class="table">

@@ -105,6 +105,16 @@ CREATE TABLE IF NOT EXISTS newsletter_subscribers (
     email      TEXT UNIQUE NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS order_items (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id     INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    product_id   INTEGER REFERENCES products(id),
+    product_name TEXT NOT NULL,
+    unit_price   INTEGER NOT NULL,
+    quantity     INTEGER NOT NULL DEFAULT 1,
+    line_total   INTEGER NOT NULL
+);
 """
 
 # Safe, additive migrations for databases created before these columns existed.

@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Your Cart — {{ settings.site_name }}{% endblock %}
+{% block content %}
+<section class="section">
+  <div class="container" style="max-width:900px;">
+    <div class="section-head reveal" style="margin-bottom:2rem;">
+      <span class="eyebrow">Your Selection</span>
+      <h2>Your Cart</h2>
+    </div>
+
+    {% if items %}
+    <div class="cart-layout">
+      <div class="cart-items">
+        {% for it in items %}
+        <div class="cart-item">
+          <div class="cart-item__image">
+            {% if product_images[it.product.id] %}
+              <img src="{{ url_for('static', filename='uploads/' ~ product_images[it.product.id]) }}" alt="{{ it.product.name }}" width="90" height="112" loading="lazy">
+            {% else %}
+              <div class="card__placeholder" style="height:100%;">{{ it.product.name[0]|upper }}</div>
+            {% endif %}
+          </div>
+          <div class="cart-item__info">
+            <a href="{{ url_for('product_detail', slug=it.product.slug) }}" class="cart-item__name">{{ it.product.name }}</a>
+            <div class="cart-item__price">{{ settings.currency_symbol }}{{ "{:,}".format(it.product.price) }} each</div>
+            <form method="POST" action="{{ url_for('cart_update') }}" class="cart-item__qty-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="product_id" value="{{ it.product.id }}">
+              <div class="qty-selector">
+                <button type="button" onclick="this.nextElementSibling.stepDown(); this.form.submit();" aria-label="Decrease quantity">−</button>
+                <input type="number" name="quantity" value="{{ it.quantity }}" min="1" max="99" aria-label="Quantity"
+                       onchange="this.form.submit();">
+                <button type="button" onclick="this.previousElementSibling.stepUp(); this.form.submit();" aria-label="Increase quantity">+</button>
+              </div>
+            </form>
+          </div>
+          <div class="cart-item__total">{{ settings.currency_symbol }}{{ "{:,}".format(it.line_total) }}</div>
+          <form method="POST" action="{{ url_for('cart_remove', product_id=it.product.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="cart-item__remove" aria-label="Remove {{ it.product.name }} from cart">✕</button>
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="cart-summary">
+        <h3>Order Summary</h3>
+        <div class="cart-summary__row">
+          <span>Subtotal</span>
+          <span id="cartSubtotalDisplay">{{ settings.currency_symbol }}{{ "{:,}".format(subtotal) }}</span>
+          <span id="cartDiscountedDisplay" style="display:none; font-weight:600;"></span>
+        </div>
+
+        <div class="field">
+          <label>Coupon Code (optional)</label>
+          <div style="display:flex; gap:0.6rem;">
+            <input type="text" id="cartCouponCode" placeholder="e.g. WELCOME10" style="text-transform:uppercase;">
+            <button type="button" class="btn btn--outline btn--sm" style="flex-shrink:0;" onclick="applyCartCoupon()">Apply</button>
+          </div>
+          <p id="cartCouponMessage" style="margin-top:0.5rem; font-size:0.82rem; display:none;"></p>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="field">
+          <label>Full Name</label>
+          <input type="text" id="cartBuyerName" placeholder="Your name">
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="cartBuyerEmail" placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label>Phone (optional)</label>
+          <input type="tel" id="cartBuyerPhone" placeholder="For faster support">
+        </div>
+
+        <button class="btn btn--full" id="cartCheckoutBtn" data-base-price="{{ subtotal }}" data-currency="{{ settings.currency_symbol }}"
+                onclick="startCartCheckout()">
+          Checkout — {{ settings.currency_symbol }}{{ "{:,}".format(subtotal) }}
+        </button>
+        <p id="cartError" style="color:#7a2222; margin-top:0.75rem; display:none;"></p>
+
+        <form method="POST" action="{{ url_for('cart_clear') }}" style="margin-top:1rem;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn--outline btn--sm btn--full">Clear Cart</button>
+        </form>
+      </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      Your cart is empty. <a href="{{ url_for('home') }}#products" style="text-decoration:underline;">Browse the catalogue</a> to find something you'll love.
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>const RAZORPAY_KEY = "{{ razorpay_key }}";</script>
+<script src="{{ url_for('static', filename='js/cart_checkout.js') }}"></script>
+{% endblock %}

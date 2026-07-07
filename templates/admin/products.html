@@ -7,35 +7,75 @@
 </div>
 
 {% if products %}
-<table class="table">
-  <tr><th></th><th>Name</th><th>Category</th><th>Price</th><th>Status</th><th></th></tr>
-  {% for p in products %}
-  <tr>
-    <td>
-      {% if thumbs[p.id] %}
-        <img class="thumb" src="{{ url_for('static', filename='uploads/' ~ thumbs[p.id]) }}">
-      {% else %}
-        <div class="thumb" style="background:var(--grey-100);"></div>
-      {% endif %}
-    </td>
-    <td>{{ p.name }}</td>
-    <td>{{ p.category or "—" }}</td>
-    <td>₹{{ "{:,}".format(p.price) }}</td>
-    <td>
-      {% if p.active %}<span class="badge badge--delivered">Live</span>
-      {% else %}<span class="badge badge--cancelled">Hidden</span>{% endif %}
-    </td>
-    <td class="row-actions">
-      <a href="{{ url_for('admin_product_edit', product_id=p.id) }}" class="btn btn--outline btn--sm">Edit</a>
-      <form method="POST" action="{{ url_for('admin_product_delete', product_id=p.id) }}"
-            onsubmit="return confirm('Delete this product permanently?');">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn--danger btn--sm" type="submit">Delete</button>
-      </form>
-    </td>
-  </tr>
-  {% endfor %}
-</table>
+<form method="POST" action="{{ url_for('admin_products_bulk') }}" id="bulkForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="bulk-bar" id="bulkBar">
+    <span id="bulkCount">0 selected</span>
+    <select name="action">
+      <option value="activate">Activate</option>
+      <option value="deactivate">Deactivate</option>
+      <option value="delete">Delete</option>
+    </select>
+    <button type="submit" onclick="return confirm('Apply this action to the selected products?');">Apply</button>
+  </div>
+
+  <table class="table">
+    <tr>
+      <th><input type="checkbox" id="selectAll" aria-label="Select all products"></th>
+      <th></th><th>Name</th><th>Category</th><th>Price</th><th>Status</th><th></th>
+    </tr>
+    {% for p in products %}
+    <tr>
+      <td><input type="checkbox" class="row-check" name="product_ids" value="{{ p.id }}"></td>
+      <td>
+        {% if thumbs[p.id] %}
+          <img class="thumb" src="{{ url_for('static', filename='uploads/' ~ thumbs[p.id]) }}">
+        {% else %}
+          <div class="thumb" style="background:var(--grey-100);"></div>
+        {% endif %}
+      </td>
+      <td>{{ p.name }}</td>
+      <td>{{ p.category or "—" }}</td>
+      <td>₹{{ "{:,}".format(p.price) }}</td>
+      <td>
+        {% if p.active %}<span class="badge badge--delivered">Live</span>
+        {% else %}<span class="badge badge--cancelled">Hidden</span>{% endif %}
+      </td>
+      <td class="row-actions">
+        <a href="{{ url_for('admin_product_edit', product_id=p.id) }}" class="btn btn--outline btn--sm">Edit</a>
+        <button class="btn btn--danger btn--sm" type="button"
+                onclick="if(confirm('Delete this product permanently?')){document.getElementById('deleteForm{{ p.id }}').submit();}">Delete</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</form>
+
+{% for p in products %}
+<form id="deleteForm{{ p.id }}" method="POST" action="{{ url_for('admin_product_delete', product_id=p.id) }}" style="display:none;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+</form>
+{% endfor %}
+
+<script>
+(function () {
+  var selectAll = document.getElementById("selectAll");
+  var rowChecks = document.querySelectorAll(".row-check");
+  var bulkBar = document.getElementById("bulkBar");
+  var bulkCount = document.getElementById("bulkCount");
+
+  function refresh() {
+    var checked = document.querySelectorAll(".row-check:checked").length;
+    bulkBar.classList.toggle("active", checked > 0);
+    bulkCount.textContent = checked + " selected";
+  }
+  selectAll.addEventListener("change", function () {
+    rowChecks.forEach(function (cb) { cb.checked = selectAll.checked; });
+    refresh();
+  });
+  rowChecks.forEach(function (cb) { cb.addEventListener("change", refresh); });
+})();
+</script>
 {% else %}
 <div class="empty-state">You haven't added any products yet. Click "Add New Product" to get started.</div>
 {% endif %}

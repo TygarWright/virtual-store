@@ -32,6 +32,13 @@
       <div class="divider"></div>
       {% if order %}
         <h3 style="font-family:var(--serif);">{{ order.product_name }}</h3>
+        {% if order_items %}
+        <ul style="margin: 0.5rem 0 1rem; padding-left: 1.1rem; font-size: 0.88rem; color: var(--grey-700);">
+          {% for it in order_items %}
+          <li>{{ it.product_name }} × {{ it.quantity }} — {{ settings.currency_symbol }}{{ "{:,}".format(it.line_total) }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
         <p>
           Status:
           <span class="badge badge--{{ order.status }}">{{ order.status }}</span>

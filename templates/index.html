@@ -8,6 +8,11 @@
     <h1>{{ settings.hero_title }}</h1>
     <p>{{ settings.hero_subtitle }}</p>
     <a href="#products" class="btn">Explore the Catalogue</a>
+    <div class="hero__scroll-cue">
+      <a href="#products" aria-label="Scroll to products">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 5v14M5 12l7 7 7-7"></path></svg>
+      </a>
+    </div>
   </div>
 </section>
 
@@ -51,19 +56,27 @@
     {% if products %}
     <div class="grid">
       {% for p in products %}
-      <a class="card reveal" style="--i: {{ loop.index0 }};" href="{{ url_for('product_detail', slug=p.slug) }}">
-        <div class="card__image">
-          {% if p.id in new_product_ids %}<span class="card__badge">New</span>{% endif %}
-          {% if product_images[p.id] %}
-            <img src="{{ url_for('static', filename='uploads/' ~ product_images[p.id]) }}" alt="{{ p.name }}" loading="lazy" width="400" height="500">
-          {% else %}
-            <div class="card__placeholder">{{ p.name[0]|upper }}</div>
-          {% endif %}
-        </div>
-        {% if p.category %}<div class="card__category">{{ p.category }}</div>{% endif %}
-        <div class="card__title">{{ p.name }}</div>
-        <div class="card__price">{{ settings.currency_symbol }}{{ "{:,}".format(p.price) }}</div>
-      </a>
+      <div class="card reveal" style="--i: {{ loop.index0 }};">
+        <a class="card__link" href="{{ url_for('product_detail', slug=p.slug) }}">
+          <div class="card__image">
+            {% if p.id in new_product_ids %}<span class="card__badge">New</span>{% endif %}
+            {% if product_images[p.id] %}
+              <img src="{{ url_for('static', filename='uploads/' ~ product_images[p.id]) }}" alt="{{ p.name }}" loading="lazy" width="400" height="500">
+            {% else %}
+              <div class="card__placeholder">{{ p.name[0]|upper }}</div>
+            {% endif %}
+          </div>
+          {% if p.category %}<div class="card__category">{{ p.category }}</div>{% endif %}
+          <div class="card__title">{{ p.name }}</div>
+          <div class="card__price">{{ settings.currency_symbol }}{{ "{:,}".format(p.price) }}</div>
+        </a>
+        <form class="add-to-cart-form card__add-form" action="{{ url_for('cart_add') }}" method="POST">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="product_id" value="{{ p.id }}">
+          <input type="hidden" name="quantity" value="1">
+          <button type="submit" class="card__add-btn">+ Add to Cart</button>
+        </form>
+      </div>
       {% endfor %}
     </div>
     {% else %}

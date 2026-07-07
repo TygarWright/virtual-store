@@ -34,6 +34,10 @@
       <a href="{{ url_for('home') }}#about">About</a>
       <a href="{{ url_for('track_order') }}">Track Order</a>
     </div>
+    <a href="{{ url_for('view_cart') }}" class="nav__cart" aria-label="View cart, {{ cart_count }} item{{ 's' if cart_count != 1 else '' }}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+      {% if cart_count > 0 %}<span class="nav__cart-badge">{{ cart_count }}</span>{% endif %}
+    </a>
     <button class="nav__toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
       <span></span><span></span><span></span>
     </button>
@@ -42,6 +46,7 @@
     <a href="{{ url_for('home') }}#products">Shop</a>
     <a href="{{ url_for('home') }}#about">About</a>
     <a href="{{ url_for('track_order') }}">Track Order</a>
+    <a href="{{ url_for('view_cart') }}">Cart{% if cart_count > 0 %} ({{ cart_count }}){% endif %}</a>
   </div>
 </nav>
 
@@ -65,6 +70,8 @@
     <span>{{ settings.contact_email }} · {{ settings.contact_phone }}</span>
   </div>
 </footer>
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
 <script src="{{ url_for('static', filename='js/animations.js') }}"></script>
+<script src="{{ url_for('static', filename='js/cart.js') }}"></script>
 </body>
 </html>
