@@ -1,3 +1,10 @@
+// Shared helper: reads the CSRF token from the page's meta tag so any
+// fetch() call across the site can include it as a header.
+window.getCsrfToken = function () {
+  var meta = document.querySelector('meta[name="csrf-token"]');
+  return meta ? meta.getAttribute("content") : "";
+};
+
 (function () {
   "use strict";
 
@@ -104,16 +111,45 @@
   var navToggle = document.getElementById("navToggle");
   var mobileMenu = document.getElementById("mobileMenu");
   if (navToggle && mobileMenu) {
-    navToggle.addEventListener("click", function () {
-      var isOpen = mobileMenu.classList.toggle("open");
-      navToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
-      navToggle.setAttribute("aria-label", isOpen ? "Close menu" : "Open menu");
+    var closeMenu = function () {
+      mobileMenu.classList.remove("open");
+      navToggle.setAttribute("aria-expanded", "false");
+      navToggle.setAttribute("aria-label", "Open menu");
+      document.body.classList.remove("menu-open");
+    };
+    var openMenu = function () {
+      mobileMenu.classList.add("open");
+      navToggle.setAttribute("aria-expanded", "true");
+      navToggle.setAttribute("aria-label", "Close menu");
+      document.body.classList.add("menu-open");
+    };
+    navToggle.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (mobileMenu.classList.contains("open")) closeMenu();
+      else openMenu();
     });
     mobileMenu.querySelectorAll("a").forEach(function (link) {
-      link.addEventListener("click", function () {
-        mobileMenu.classList.remove("open");
-        navToggle.setAttribute("aria-expanded", "false");
-      });
+      link.addEventListener("click", closeMenu);
+    });
+    // Tapping/clicking anywhere outside the open menu closes it
+    document.addEventListener("click", function (e) {
+      if (
+        mobileMenu.classList.contains("open") &&
+        !mobileMenu.contains(e.target) &&
+        !navToggle.contains(e.target)
+      ) {
+        closeMenu();
+      }
+    });
+    // Escape closes it too
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && mobileMenu.classList.contains("open")) closeMenu();
+    });
+    // Closing the mobile viewport back out to desktop width shouldn't leave
+    // the menu stuck open behind the (now hidden) toggle button
+    window.addEventListener("resize", function () {
+      if (window.innerWidth > 900 && mobileMenu.classList.contains("open")) closeMenu();
     });
   }
 
@@ -131,4 +167,63 @@
     });
     if (thumbEl) thumbEl.classList.add("active");
   };
+
+  // ---------- Subtle keystroke pulse ----------
+  // A tiny, elegant flicker of the scroll-progress bar every time a key is
+  // pressed — physical keyboard, phone keyboard, anything that fires
+  // keydown. Throttled so fast typing doesn't spam animations.
+  if (progress) {
+    var keyPulseReady = true;
+    document.addEventListener("keydown", function () {
+      if (!keyPulseReady) return;
+      keyPulseReady = false;
+      progress.classList.add("key-pulse");
+      setTimeout(function () {
+        progress.classList.remove("key-pulse");
+        keyPulseReady = true;
+      }, 260);
+    });
+  }
+
+  // ---------- Typing spark ----------
+  // Wakes a small dot cluster beside the search field the moment someone
+  // starts typing, gives each real keystroke its own quick pulse, and lets
+  // the whole thing fade back to rest ~700ms after typing stops (or the
+  // field loses focus) rather than snapping off abruptly.
+  document.querySelectorAll(".nav__search").forEach(function (form) {
+    var input = form.querySelector("input");
+    var spark = form.querySelector(".type-spark");
+    if (!input || !spark) return;
+    var dots = spark.querySelectorAll("i");
+    var idleTimer = null;
+    var dotIndex = 0;
+    var ignoredKeys = { Shift: 1, Control: 1, Alt: 1, Meta: 1, Tab: 1, CapsLock: 1, Escape: 1 };
+
+    function comeAlive() {
+      form.classList.add("is-typing");
+    }
+    function dieGracefully() {
+      form.classList.remove("is-typing");
+    }
+    function kick() {
+      var dot = dots[dotIndex % dots.length];
+      dotIndex++;
+      dot.classList.remove("spark-kick");
+      void dot.offsetWidth; // restart the animation even if this dot just fired
+      dot.classList.add("spark-kick");
+      setTimeout(function () { dot.classList.remove("spark-kick"); }, 320);
+    }
+
+    input.addEventListener("keydown", function (e) {
+      if (ignoredKeys[e.key]) return;
+      comeAlive();
+      kick();
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(dieGracefully, 700);
+    });
+    input.addEventListener("blur", function () {
+      clearTimeout(idleTimer);
+      dieGracefully();
+    });
+  });
 })();

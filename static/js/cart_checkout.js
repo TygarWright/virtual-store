@@ -18,7 +18,7 @@ async function applyCartCoupon() {
   try {
     const res = await fetch("/api/cart/apply-coupon", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": window.getCsrfToken() },
       body: JSON.stringify({ code }),
     });
     const data = await res.json();
@@ -94,7 +94,7 @@ async function startCartCheckout() {
   try {
     const res = await fetch("/api/cart/create-order", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": window.getCsrfToken() },
       body: JSON.stringify({ name, email, phone, coupon_code: cartAppliedCoupon || "" }),
     });
     const data = await res.json();
@@ -121,7 +121,7 @@ async function startCartCheckout() {
       handler: async function (response) {
         const verifyRes = await fetch("/api/verify-payment", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": window.getCsrfToken() },
           body: JSON.stringify({
             razorpay_order_id: response.razorpay_order_id,
             razorpay_payment_id: response.razorpay_payment_id,

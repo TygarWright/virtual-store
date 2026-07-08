@@ -142,6 +142,9 @@
     <form method="POST" action="{{ url_for('newsletter_subscribe') }}" class="newsletter-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="email" name="email" placeholder="you@example.com" required>
+      {% if turnstile_enabled %}
+      <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}" data-theme="dark" style="margin:0.75rem auto 0;"></div>
+      {% endif %}
       <button class="btn btn--invert" type="submit">Subscribe</button>
     </form>
   </div>
