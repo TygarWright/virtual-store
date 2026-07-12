@@ -3,3 +3,6 @@ Werkzeug==3.1.7
 requests==2.33.1
 Pillow==12.1.1
 gunicorn==23.0.0
+# Verifies Firebase phone-auth ID tokens server-side (no firebase-admin /
+# service-account needed). Only used if FIREBASE_* env vars are set.
+google-auth==2.38.0

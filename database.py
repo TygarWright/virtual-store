@@ -106,6 +106,16 @@ CREATE TABLE IF NOT EXISTS newsletter_subscribers (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS customers (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    firebase_uid  TEXT UNIQUE NOT NULL,
+    phone         TEXT NOT NULL DEFAULT '',
+    name          TEXT NOT NULL DEFAULT '',
+    email         TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL,
+    last_login_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS order_items (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     order_id     INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -124,6 +134,14 @@ MIGRATIONS = [
     "ALTER TABLE products ADD COLUMN category TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE orders ADD COLUMN coupon_code TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE orders ADD COLUMN discount_amount INTEGER NOT NULL DEFAULT 0",
+    # 'manual' = admin reviews and delivers by hand (default, unchanged behaviour).
+    # 'automatic' = the moment payment is confirmed, auto_delivery_content is
+    # sent to the customer immediately — no admin step needed. Good for things
+    # like license keys or download links that don't need per-order review.
+    "ALTER TABLE products ADD COLUMN delivery_mode TEXT NOT NULL DEFAULT 'manual'",
+    "ALTER TABLE products ADD COLUMN auto_delivery_content TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE orders ADD COLUMN customer_id INTEGER REFERENCES customers(id)",
+    "ALTER TABLE orders ADD COLUMN auto_delivered INTEGER NOT NULL DEFAULT 0",
 ]
 
 DEFAULT_SETTINGS = {

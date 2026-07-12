@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta, timezone
 
 from flask import (
@@ -12,6 +13,7 @@ from helpers import (
     login_required, get_csrf_token, check_csrf, check_csrf_api, slugify,
     save_product_image, delete_file_quietly, send_email, email_enabled,
     rate_limited, turnstile_enabled, verify_turnstile,
+    firebase_auth_enabled, verify_firebase_id_token,
 )
 import razorpay_client as rzp
 
@@ -52,9 +54,13 @@ def set_security_headers(response):
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data:; "
-        "script-src 'self' https://challenges.cloudflare.com; "
-        "frame-src https://challenges.cloudflare.com; "
-        "connect-src 'self'; "
+        "script-src 'self' https://challenges.cloudflare.com https://checkout.razorpay.com "
+        "https://www.gstatic.com https://www.google.com https://apis.google.com; "
+        "frame-src https://challenges.cloudflare.com https://api.razorpay.com "
+        "https://www.google.com https://*.firebaseapp.com; "
+        "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com "
+        "https://identitytoolkit.googleapis.com https://securetoken.googleapis.com "
+        "https://www.googleapis.com; "
         "base-uri 'self'; "
         "object-src 'none'",
     )
@@ -70,6 +76,18 @@ def inject_globals():
         "cart_count": cart_count,
         "turnstile_enabled": turnstile_enabled(),
         "turnstile_site_key": config.TURNSTILE_SITE_KEY,
+        "firebase_auth_enabled": firebase_auth_enabled(),
+        "firebase_config": {
+            "apiKey": config.FIREBASE_API_KEY,
+            "authDomain": config.FIREBASE_AUTH_DOMAIN,
+            "projectId": config.FIREBASE_PROJECT_ID,
+            "appId": config.FIREBASE_APP_ID,
+            "messagingSenderId": config.FIREBASE_MESSAGING_SENDER_ID,
+            "storageBucket": config.FIREBASE_STORAGE_BUCKET,
+        },
+        "current_customer_name": session.get("customer_name", ""),
+        "current_customer_phone": session.get("customer_phone", ""),
+        "current_customer_email": session.get("customer_email", ""),
     }
 
 
@@ -124,6 +142,7 @@ def home():
 
     category = (request.args.get("category") or "").strip()
     query = (request.args.get("q") or "").strip()
+    sort = request.args.get("sort", "")
     categories = [
         r["category"] for r in conn.execute(
             "SELECT DISTINCT category FROM products WHERE active = 1 AND category != '' ORDER BY category ASC"
@@ -146,6 +165,16 @@ def home():
         products = conn.execute(
             "SELECT * FROM products WHERE active = 1 ORDER BY position ASC, id DESC"
         ).fetchall()
+
+    # Apply sort if requested (default: by position, then newest first)
+    if sort == "price_low":
+        products = sorted(products, key=lambda p: p["price"])
+    elif sort == "price_high":
+        products = sorted(products, key=lambda p: p["price"], reverse=True)
+    elif sort == "newest":
+        products = sorted(products, key=lambda p: p["id"], reverse=True)
+    elif sort == "name":
+        products = sorted(products, key=lambda p: p["name"].lower())
 
     product_images = {}
     for p in products:
@@ -171,7 +200,7 @@ def home():
         products=products, product_images=product_images,
         categories=categories, active_category=category,
         testimonials=testimonials, faqs=faqs, search_query=query,
-        new_product_ids=new_product_ids,
+        new_product_ids=new_product_ids, sort=sort,
     )
 
 
@@ -215,6 +244,16 @@ def product_detail(slug):
         related_images[r["id"]] = img["filename"] if img else None
 
     conn.close()
+
+    # Track recently viewed products in session (keep last 8, exclude current)
+    viewed = session.get("recently_viewed", [])
+    pid_str = str(product["id"])
+    if pid_str in viewed:
+        viewed.remove(pid_str)
+    viewed.insert(0, pid_str)
+    session["recently_viewed"] = viewed[:8]
+    session.modified = True
+
     return render_template(
         "product.html", settings=settings, product=product,
         images=[i["filename"] for i in images],
@@ -285,10 +324,12 @@ def api_create_order():
     conn.execute(
         """INSERT INTO orders
            (order_ref, product_id, product_name, customer_name, customer_email,
-            customer_phone, amount, coupon_code, discount_amount, razorpay_order_id, status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'created', ?)""",
+            customer_phone, amount, coupon_code, discount_amount, razorpay_order_id,
+            status, created_at, customer_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'created', ?, ?)""",
         (order_ref, product["id"], product["name"], name, email, phone,
-         final_amount, applied_code, discount_amount, rzp_order["id"], db.now()),
+         final_amount, applied_code, discount_amount, rzp_order["id"], db.now(),
+         session.get("customer_id")),
     )
     conn.commit()
     conn.close()
@@ -480,10 +521,12 @@ def api_cart_create_order():
     cur = conn.execute(
         """INSERT INTO orders
            (order_ref, product_id, product_name, customer_name, customer_email,
-            customer_phone, amount, coupon_code, discount_amount, razorpay_order_id, status, created_at)
-           VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'created', ?)""",
+            customer_phone, amount, coupon_code, discount_amount, razorpay_order_id,
+            status, created_at, customer_id)
+           VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'created', ?, ?)""",
         (order_ref, summary_name, name, email, phone,
-         final_amount, applied_code, discount_amount, rzp_order["id"], db.now()),
+         final_amount, applied_code, discount_amount, rzp_order["id"], db.now(),
+         session.get("customer_id")),
     )
     order_id = cur.lastrowid
     for it in items:
@@ -589,6 +632,12 @@ def api_verify_payment():
     order_items = conn.execute(
         "SELECT * FROM order_items WHERE order_id = ?", (order["id"],)
     ).fetchall()
+
+    # Per-product automatic delivery: if every item on this order is set to
+    # "automatic" in the admin panel, the order is delivered instantly —
+    # no human review step. Mixed carts (some auto, some manual) are left
+    # for manual review so nothing gets half-delivered.
+    auto_message = _maybe_auto_deliver(conn, order, order_items)
     conn.commit()
     conn.close()
 
@@ -596,16 +645,19 @@ def api_verify_payment():
         session["cart"] = {}
         session.modified = True
 
+    if order_items:
+        lines = "\n".join(
+            f"  - {it['product_name']} x{it['quantity']} — "
+            f"{'{:,}'.format(it['line_total'])}"
+            for it in order_items
+        )
+        item_block = f"Items:\n{lines}\n\n"
+        item_line = ", ".join(f"{it['product_name']} x{it['quantity']}" for it in order_items)
+    else:
+        item_block = f"Item: {order['product_name']}\n\n"
+        item_line = order["product_name"]
+
     if email_enabled():
-        if order_items:
-            lines = "\n".join(
-                f"  - {it['product_name']} x{it['quantity']} — "
-                f"{'{:,}'.format(it['line_total'])}"
-                for it in order_items
-            )
-            item_block = f"Items:\n{lines}\n\n"
-        else:
-            item_block = f"Item: {order['product_name']}\n\n"
         send_email(
             order["customer_email"],
             f"We've received your order {order['order_ref']}",
@@ -617,8 +669,62 @@ def api_verify_payment():
             f"You can check its status any time at our order tracking page.\n\n"
             f"We'll be in touch shortly.",
         )
+        if auto_message is not None:
+            send_email(
+                order["customer_email"],
+                f"Your order {order['order_ref']} has been delivered",
+                f"Hi {order['customer_name']},\n\n"
+                f"Great news — your order for \"{item_line}\" is ready, delivered instantly!\n\n"
+                f"{auto_message}\n\n"
+                f"Order reference: {order['order_ref']}\n\nThank you for shopping with us.",
+            )
 
-    return jsonify({"success": True, "order_ref": order["order_ref"]})
+    return jsonify({"success": True, "order_ref": order["order_ref"], "auto_delivered": auto_message is not None})
+
+
+def _maybe_auto_deliver(conn, order, order_items):
+    """If every product in this order has delivery_mode='automatic', marks
+    the order delivered right away and returns the combined delivery
+    message. Otherwise leaves the order at 'paid' for manual review and
+    returns None. Must be called before conn.commit()/conn.close()."""
+    if order_items:
+        product_ids = [it["product_id"] for it in order_items if it["product_id"]]
+        if len(product_ids) != len(order_items):
+            return None  # a purchased product was later deleted — play it safe
+        placeholders = ",".join("?" * len(product_ids))
+        rows = conn.execute(
+            f"SELECT id, name, delivery_mode, auto_delivery_content FROM products "
+            f"WHERE id IN ({placeholders})",
+            product_ids,
+        ).fetchall()
+        by_id = {r["id"]: r for r in rows}
+        if len(by_id) != len(set(product_ids)):
+            return None
+        if not all(by_id[pid]["delivery_mode"] == "automatic" for pid in product_ids):
+            return None
+        parts = [
+            f"{by_id[it['product_id']]['name']}:\n{(by_id[it['product_id']]['auto_delivery_content'] or '').strip()}"
+            for it in order_items
+            if (by_id[it["product_id"]]["auto_delivery_content"] or "").strip()
+        ]
+        message = "\n\n".join(parts).strip()
+    else:
+        if not order["product_id"]:
+            return None
+        product = conn.execute(
+            "SELECT delivery_mode, auto_delivery_content FROM products WHERE id = ?",
+            (order["product_id"],),
+        ).fetchone()
+        if not product or product["delivery_mode"] != "automatic":
+            return None
+        message = (product["auto_delivery_content"] or "").strip()
+
+    conn.execute(
+        "UPDATE orders SET status = 'delivered', delivery_message = ?, "
+        "delivered_at = ?, auto_delivered = 1 WHERE id = ?",
+        (message, db.now(), order["id"]),
+    )
+    return message
 
 
 @app.route("/track", methods=["GET", "POST"])
@@ -661,6 +767,71 @@ def track_order():
     )
 
 
+# ============================================================= CUSTOMER AUTH (Firebase phone/OTP)
+
+@app.route("/auth/phone/verify", methods=["POST"])
+def auth_phone_verify():
+    """Called from the browser right after Firebase confirms the SMS code.
+    We re-verify the ID token server-side (never trust the client's word for
+    who they are), then create or look up the matching customer account and
+    log them into a normal Flask session — no password involved."""
+    check_csrf_api()
+    if rate_limited("phone-verify", max_attempts=10, window_seconds=60):
+        return jsonify({"error": "Too many attempts — please wait a minute and try again."}), 429
+    if not firebase_auth_enabled():
+        return jsonify({"error": "Phone sign-in isn't set up on this site yet."}), 503
+
+    data = request.get_json(force=True, silent=True) or {}
+    id_token = data.get("id_token", "")
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+
+    decoded = verify_firebase_id_token(id_token)
+    if not decoded:
+        return jsonify({"error": "We couldn't verify that code. Please try again."}), 400
+
+    uid = decoded.get("uid") or decoded.get("sub")
+    phone = decoded.get("phone_number", "")
+    if not uid:
+        return jsonify({"error": "We couldn't verify that code. Please try again."}), 400
+
+    conn = db.get_db()
+    customer = conn.execute("SELECT * FROM customers WHERE firebase_uid = ?", (uid,)).fetchone()
+    if customer:
+        new_name = name or customer["name"]
+        new_email = email or customer["email"]
+        conn.execute(
+            "UPDATE customers SET name = ?, email = ?, phone = ?, last_login_at = ? WHERE id = ?",
+            (new_name, new_email, phone, db.now(), customer["id"]),
+        )
+        customer_id = customer["id"]
+    else:
+        cur = conn.execute(
+            """INSERT INTO customers (firebase_uid, phone, name, email, created_at, last_login_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (uid, phone, name, email, db.now(), db.now()),
+        )
+        customer_id = cur.lastrowid
+        new_name, new_email = name, email
+    conn.commit()
+    conn.close()
+
+    session["customer_id"] = customer_id
+    session["customer_name"] = new_name
+    session["customer_phone"] = phone
+    session["customer_email"] = new_email
+    return jsonify({"success": True, "name": new_name, "phone": phone, "email": new_email})
+
+
+@app.route("/auth/logout", methods=["POST"])
+def auth_logout():
+    check_csrf()
+    for key in ("customer_id", "customer_name", "customer_phone", "customer_email"):
+        session.pop(key, None)
+    flash("Signed out.", "success")
+    return redirect(request.referrer or url_for("home"))
+
+
 @app.route("/newsletter/subscribe", methods=["POST"])
 def newsletter_subscribe():
     check_csrf()
@@ -699,16 +870,27 @@ def robots():
     return "\n".join(lines), 200, {"Content-Type": "text/plain"}
 
 
+@app.route("/favicon.ico")
+def favicon():
+    path = os.path.join(app.static_folder, "favicon.ico")
+    if os.path.exists(path):
+        return app.send_static_file("favicon.ico")
+    return "", 204
+
+
 @app.route("/sitemap.xml")
 def sitemap():
     conn = db.get_db()
-    products = conn.execute("SELECT slug FROM products WHERE active = 1").fetchall()
+    products = conn.execute("SELECT slug, created_at FROM products WHERE active = 1").fetchall()
     conn.close()
     urls = [url_for("home", _external=True), url_for("track_order", _external=True)]
-    urls += [url_for("product_detail", slug=p["slug"], _external=True) for p in products]
     xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for u in urls:
-        xml.append(f"<url><loc>{u}</loc></url>")
+        xml.append(f"<url><loc>{u}</loc><lastmod>{datetime.now(timezone.utc).date()}</lastmod></url>")
+    for p in products:
+        loc = url_for("product_detail", slug=p["slug"], _external=True)
+        lastmod = (p["created_at"][:10] if p["created_at"] else datetime.now(timezone.utc).date())
+        xml.append(f"<url><loc>{loc}</loc><lastmod>{lastmod}</lastmod></url>")
     xml.append("</urlset>")
     return "\n".join(xml), 200, {"Content-Type": "application/xml"}
 
@@ -902,8 +1084,22 @@ def admin_sections_move(section_id, direction):
 @app.route("/admin/products")
 @login_required
 def admin_products():
+    q = (request.args.get("q") or "").strip()
+    cat = (request.args.get("category") or "").strip()
     conn = db.get_db()
-    products = conn.execute("SELECT * FROM products ORDER BY position ASC, id DESC").fetchall()
+    clauses = []
+    params = []
+    if q:
+        clauses.append("(name LIKE ? OR short_description LIKE ? OR category LIKE ?)")
+        like = f"%{q}%"
+        params += [like, like, like]
+    if cat:
+        clauses.append("category = ?")
+        params.append(cat)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    products = conn.execute(
+        f"SELECT * FROM products {where} ORDER BY position ASC, id DESC", params
+    ).fetchall()
     thumbs = {}
     for p in products:
         img = conn.execute(
@@ -911,8 +1107,13 @@ def admin_products():
             (p["id"],),
         ).fetchone()
         thumbs[p["id"]] = img["filename"] if img else None
+    categories = [
+        r["category"] for r in conn.execute(
+            "SELECT DISTINCT category FROM products WHERE category != '' ORDER BY category ASC"
+        ).fetchall()
+    ]
     conn.close()
-    return render_template("admin/products.html", products=products, thumbs=thumbs)
+    return render_template("admin/products.html", products=products, thumbs=thumbs, q=q, cat=cat, categories=categories)
 
 
 @app.route("/admin/products/new", methods=["GET", "POST"])
@@ -961,6 +1162,10 @@ def _save_product(product_id):
     price_raw = request.form.get("price", "0").strip()
     category = request.form.get("category", "").strip()
     active = 1 if request.form.get("active") else 0
+    delivery_mode = request.form.get("delivery_mode", "manual").strip()
+    if delivery_mode not in ("manual", "automatic"):
+        delivery_mode = "manual"
+    auto_delivery_content = request.form.get("auto_delivery_content", "").strip()
 
     if not name:
         flash("Please give the product a name.", "error")
@@ -977,9 +1182,24 @@ def _save_product(product_id):
     if product_id:
         conn.execute(
             """UPDATE products SET name=?, short_description=?, description=?,
-               price=?, category=?, active=? WHERE id=?""",
-            (name, short_description, description, price, category, active, product_id),
+               price=?, category=?, active=?, delivery_mode=?, auto_delivery_content=? WHERE id=?""",
+            (name, short_description, description, price, category, active,
+             delivery_mode, auto_delivery_content, product_id),
         )
+        # Update slug if the name changed (keep it in sync)
+        new_slug_base = slugify(name)
+        current_slug = conn.execute(
+            "SELECT slug FROM products WHERE id = ?", (product_id,)
+        ).fetchone()["slug"]
+        if current_slug != new_slug_base and not current_slug.startswith(new_slug_base + "-"):
+            new_slug = new_slug_base
+            i = 2
+            while conn.execute(
+                "SELECT 1 FROM products WHERE slug = ? AND id != ?", (new_slug, product_id)
+            ).fetchone():
+                new_slug = f"{new_slug_base}-{i}"
+                i += 1
+            conn.execute("UPDATE products SET slug = ? WHERE id = ?", (new_slug, product_id))
     else:
         slug_base = slugify(name)
         slug = slug_base
@@ -990,8 +1210,10 @@ def _save_product(product_id):
         max_pos = conn.execute("SELECT COALESCE(MAX(position), -1) m FROM products").fetchone()["m"]
         cur = conn.execute(
             """INSERT INTO products (name, slug, short_description, description, price,
-               category, active, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (name, slug, short_description, description, price, category, active, max_pos + 1, db.now()),
+               category, active, position, created_at, delivery_mode, auto_delivery_content)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (name, slug, short_description, description, price, category, active, max_pos + 1, db.now(),
+             delivery_mode, auto_delivery_content),
         )
         product_id = cur.lastrowid
 
@@ -1017,6 +1239,24 @@ def _save_product(product_id):
     conn.close()
     flash("Product saved.", "success")
     return redirect(url_for("admin_product_edit", product_id=product_id))
+
+
+@app.route("/admin/products/move/<int:product_id>/<direction>", methods=["POST"])
+@login_required
+def admin_product_move(product_id, direction):
+    check_csrf()
+    conn = db.get_db()
+    products = conn.execute("SELECT * FROM products ORDER BY position ASC, id ASC").fetchall()
+    ids = [p["id"] for p in products]
+    idx = ids.index(product_id)
+    swap_idx = idx - 1 if direction == "up" else idx + 1
+    if 0 <= swap_idx < len(ids):
+        a, b = products[idx], products[swap_idx]
+        conn.execute("UPDATE products SET position = ? WHERE id = ?", (b["position"], a["id"]))
+        conn.execute("UPDATE products SET position = ? WHERE id = ?", (a["position"], b["id"]))
+        conn.commit()
+    conn.close()
+    return redirect(url_for("admin_products", q=request.args.get("q", ""), category=request.args.get("category", "")))
 
 
 @app.route("/admin/products/bulk", methods=["POST"])

@@ -145,7 +145,6 @@ async function startCheckout(productId, productName) {
       resetBtn(btn, productName);
     });
     rzp.open();
-    resetBtn(btn, productName);
   } catch (err) {
     showBuyError("Network error. Please try again.");
     resetBtn(btn, productName);

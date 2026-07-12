@@ -12,6 +12,9 @@
       setTimeout(function () { toast.remove(); }, 250);
     }, 2600);
   }
+  window.showToast = function (message, kind) {
+    showToast(message, kind === "error" || kind === true);
+  };
 
   function updateCartBadges(count) {
     document.querySelectorAll(".nav__cart-badge").forEach(function (el) {

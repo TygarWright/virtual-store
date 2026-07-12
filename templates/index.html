@@ -54,6 +54,28 @@
     {% endif %}
 
     {% if products %}
+    <div class="sort-bar reveal">
+      <span class="sort-bar__label">{{ products|length }} item{{ 's' if products|length != 1 }}</span>
+      <div class="sort-bar__right">
+        <label for="sortSelect" class="sort-bar__label">Sort by</label>
+        <select id="sortSelect" onchange="applySort(this.value)">
+          <option value="">Featured</option>
+          <option value="newest" {{ 'selected' if sort == 'newest' }}>Newest</option>
+          <option value="price_low" {{ 'selected' if sort == 'price_low' }}>Price: Low to High</option>
+          <option value="price_high" {{ 'selected' if sort == 'price_high' }}>Price: High to Low</option>
+          <option value="name" {{ 'selected' if sort == 'name' }}>Name: A to Z</option>
+        </select>
+      </div>
+    </div>
+    <script>
+    function applySort(val) {
+      var url = new URL(window.location);
+      if (val) url.searchParams.set('sort', val);
+      else url.searchParams.delete('sort');
+      url.hash = 'products';
+      window.location = url.toString();
+    }
+    </script>
     <div class="grid">
       {% for p in products %}
       <div class="card reveal" style="--i: {{ loop.index0 }};">
@@ -82,7 +104,7 @@
     {% else %}
     <div class="empty-state">
       {% if search_query %}No products match &ldquo;{{ search_query }}&rdquo;. Try a different search, or <a href="{{ url_for('home') }}#products" style="text-decoration:underline;">browse everything</a>.
-      {% elif active_category %}No products in "{{ active_category }}" right now.
+      {% elif active_category %}No products in "{{ active_category }}" right now. <a href="{{ url_for('home') }}#products" style="text-decoration:underline;">View all products</a>.
       {% else %}Nothing here yet — check back soon.{% endif %}
     </div>
     {% endif %}

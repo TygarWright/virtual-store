@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ product.name }} — {{ settings.site_name }}{% endblock %}
 {% block og_title %}{{ product.name }} — {{ settings.site_name }}{% endblock %}
+<meta name="description" content="{{ product.short_description or product.name }}">
 {% block og_image %}{% if images %}<meta property="og:image" content="{{ url_for('static', filename='uploads/' ~ images[0], _external=True) }}">{% endif %}{% endblock %}
 {% block head %}
 <script type="application/ld+json">
@@ -48,7 +49,9 @@
                class="{{ 'active' if loop.first else '' }}"
                loading="lazy" width="64" height="80"
                alt="{{ product.name }} — view {{ loop.index }}"
-               onclick="swapGalleryImage(this.src, this)">
+               tabindex="0" role="button"
+               onclick="swapGalleryImage(this.src, this)"
+               onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();swapGalleryImage(this.src,this);}">
         {% endfor %}
       </div>
       {% endif %}
@@ -77,18 +80,23 @@
       </form>
 
       <div id="buyForm">
+        {% if firebase_auth_enabled %}
+        <p class="auth-inline-hint">
+          <a href="#" onclick="openAuthModal(); return false;">Sign in with your phone</a> to fill this in automatically, or continue as a guest below.
+        </p>
+        {% endif %}
         <div class="field">
           <label>Full Name</label>
-          <input type="text" id="buyerName" placeholder="Your name">
+          <input type="text" id="buyerName" placeholder="Your name" value="{{ current_customer_name }}">
         </div>
         <div class="field">
           <label>Email</label>
-          <input type="email" id="buyerEmail" placeholder="you@example.com">
+          <input type="email" id="buyerEmail" placeholder="you@example.com" value="{{ current_customer_email }}">
           <small>Your product & order status will be tied to this email.</small>
         </div>
         <div class="field">
           <label>Phone (optional)</label>
-          <input type="tel" id="buyerPhone" placeholder="For faster support">
+          <input type="tel" id="buyerPhone" placeholder="For faster support" value="{{ current_customer_phone }}">
         </div>
         <div class="field">
           <label>Coupon Code (optional)</label>

@@ -37,6 +37,9 @@ body.has-custom-cursor, body.has-custom-cursor a, body.has-custom-cursor button,
 body.has-custom-cursor input, body.has-custom-cursor textarea { cursor: none; }
 img { max-width: 100%; display: block; }
 a { color: inherit; text-decoration: none; }
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--black); outline-offset: 2px;
+}
 h1, h2, h3, h4 {
   font-family: var(--serif);
   font-weight: 500;
@@ -190,6 +193,18 @@ p { margin: 0 0 1em; color: var(--grey-700); }
   display: flex; align-items: center; justify-content: center; padding: 0 4px;
 }
 
+/* ---------- Back to top button ---------- */
+.back-to-top {
+  position: fixed; bottom: 1.5rem; left: 1.5rem; z-index: 45;
+  width: 42px; height: 42px; border-radius: 50%;
+  background: var(--black); color: var(--white);
+  border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  opacity: 0; transform: translateY(10px); pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.back-to-top.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.back-to-top:hover { background: var(--grey-700); }
+
 /* ---------- Toasts ---------- */
 .toast-stack {
   position: fixed; bottom: 1.25rem; right: 1.25rem; z-index: 100;
@@ -269,6 +284,7 @@ p { margin: 0 0 1em; color: var(--grey-700); }
 .product-gallery__thumbs { display: flex; gap: 0.6rem; flex-wrap: wrap; }
 .product-gallery__thumbs img { width: 64px; height: 80px; object-fit: cover; cursor: pointer; opacity: 0.55; border: 1px solid transparent; transition: opacity .2s; }
 .product-gallery__thumbs img:hover, .product-gallery__thumbs img.active { opacity: 1; border-color: var(--black); }
+.product-gallery__thumbs img:focus-visible { outline: 2px solid var(--black); outline-offset: 2px; }
 .product-info h1 { font-size: 2.1rem; }
 .product-price { font-size: 1.4rem; margin: 0.5rem 0 1.5rem; }
 .product-description { white-space: pre-line; margin-bottom: 2rem; }
@@ -292,6 +308,8 @@ p { margin: 0 0 1em; color: var(--grey-700); }
 /* ---------- Footer ---------- */
 .footer { padding: 3rem 0; border-top: 1px solid var(--border); font-size: 0.85rem; color: var(--grey-500); }
 .footer .container { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+.footer a { color: var(--grey-500); transition: color 0.2s; }
+.footer a:hover { color: var(--black); }
 
 /* ---------- Flash messages ---------- */
 .flash { padding: 0.9rem 1.2rem; margin-bottom: 1.5rem; border-radius: 2px; font-size: 0.9rem; }
@@ -523,6 +541,20 @@ body.menu-open { overflow: hidden; }
 .filter-tab:hover { border-color: var(--black); }
 .filter-tab.active { background: var(--black); color: var(--white); border-color: var(--black); }
 
+/* ---------- Sort bar ---------- */
+.sort-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 2rem; flex-wrap: wrap; gap: 0.75rem;
+}
+.sort-bar__label { font-size: 0.78rem; letter-spacing: 0.04em; color: var(--grey-500); }
+.sort-bar__right { display: flex; align-items: center; gap: 0.5rem; }
+.sort-bar__right select {
+  font-family: var(--sans); font-size: 0.82rem; padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--white);
+  color: var(--black); cursor: pointer;
+}
+.sort-bar__right select:focus { outline: none; border-color: var(--black); }
+
 .card__category {
   font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--grey-500);
   margin-bottom: 0.3rem;
@@ -652,4 +684,45 @@ body.menu-open { overflow: hidden; }
 @media (max-width: 720px) {
   .mobile-buy-bar { display: flex; }
   .product-info { padding-bottom: 4.5rem; }
+}
+
+/* ============================================================
+   Firebase phone/OTP sign-in — nav account button, inline hint,
+   and modal (overlay + panel). Pure black & white, same language
+   as the rest of the design system.
+   ============================================================ */
+.nav__account-btn {
+  font: inherit; font-size: 0.85rem; background: none; border: none;
+  color: var(--black); cursor: pointer; padding: 0; text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.nav__links form { display: inline-flex; align-items: center; }
+
+.auth-inline-hint {
+  font-size: 0.82rem; color: var(--grey-700); margin: 0 0 1.1rem;
+}
+.auth-inline-hint a { text-decoration: underline; text-underline-offset: 2px; color: var(--black); }
+
+.auth-modal {
+  position: fixed; inset: 0; z-index: 10050; display: none;
+}
+.auth-modal--open { display: block; }
+.auth-modal__backdrop {
+  position: absolute; inset: 0; background: rgba(10, 10, 10, 0.55);
+}
+.auth-modal__panel {
+  position: relative; max-width: 420px; width: calc(100% - 2rem);
+  margin: 6vh auto 0; background: var(--white); border-radius: 4px;
+  padding: 2rem 1.75rem; box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  max-height: 88vh; overflow-y: auto;
+}
+.auth-modal__panel h3 { margin: 0 0 0.5rem; font-family: var(--serif); font-size: 1.5rem; }
+.auth-modal__hint { font-size: 0.85rem; color: var(--grey-700); margin: 0 0 1.25rem; }
+.auth-modal__close {
+  position: absolute; top: 0.9rem; right: 1rem; background: none; border: none;
+  font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--grey-500);
+}
+.auth-modal__close:hover { color: var(--black); }
+.auth-modal__error {
+  color: #7a2222; font-size: 0.82rem; margin-top: 0.75rem; display: none;
 }

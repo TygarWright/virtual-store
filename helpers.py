@@ -15,7 +15,7 @@ from PIL import Image, UnidentifiedImageError
 import config
 
 
-# ---------- Auth ----------
+# ---------- Auth (admin) ----------
 
 def login_required(view):
     @wraps(view)
@@ -24,6 +24,47 @@ def login_required(view):
             return redirect(url_for("admin_login", next=request.path))
         return view(*args, **kwargs)
     return wrapped
+
+
+# ---------- Auth (customer, via Firebase phone/OTP) ----------
+
+def customer_login_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("customer_id"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Please sign in first."}), 401
+            return redirect(url_for("home"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def firebase_auth_enabled():
+    return bool(config.FIREBASE_API_KEY and config.FIREBASE_PROJECT_ID)
+
+
+def verify_firebase_id_token(id_token):
+    """Verifies a Firebase Auth ID token sent up from the browser after a
+    successful phone/OTP sign-in, using Google's public certs — no service
+    account or firebase-admin dependency needed. Returns the decoded token
+    dict (with at least 'uid'/'sub' and optionally 'phone_number') on
+    success, or None if the token is missing/invalid/expired/wrong project.
+    google-auth is an optional dependency: if it isn't installed, phone
+    auth silently behaves as disabled rather than crashing the site."""
+    if not id_token or not firebase_auth_enabled():
+        return None
+    try:
+        from google.auth.transport import requests as google_requests
+        from google.oauth2 import id_token as google_id_token
+    except ImportError:
+        return None
+    try:
+        decoded = google_id_token.verify_firebase_token(
+            id_token, google_requests.Request(), audience=config.FIREBASE_PROJECT_ID
+        )
+        return decoded
+    except Exception:
+        return None
 
 
 # ---------- CSRF (lightweight, no extra dependency) ----------
@@ -222,24 +263,96 @@ def delete_file_quietly(filename):
         pass
 
 
-# ---------- Email (optional) ----------
+# ---------- Email (optional — Resend or SendGrid preferred, SMTP fallback) ----------
+# Three interchangeable ways to send mail, tried in this order: Resend (HTTP
+# API, no SMTP setup needed), SendGrid (HTTP API), then classic SMTP. Any one
+# of them being configured is enough — the site works the same either way,
+# callers just call send_email() and don't need to know which is active.
 
 def email_enabled():
-    return bool(config.SMTP_HOST and config.SMTP_USERNAME and config.SMTP_PASSWORD)
+    return bool(
+        config.RESEND_API_KEY or config.SENDGRID_API_KEY
+        or (config.SMTP_HOST and config.SMTP_USERNAME and config.SMTP_PASSWORD)
+    )
+
+
+def _from_header():
+    name = config.EMAIL_FROM_NAME.strip()
+    addr = config.EMAIL_FROM or config.SMTP_FROM
+    return f"{name} <{addr}>" if name else addr
+
+
+def _send_via_resend(to_address, subject, body):
+    resp = requests.post(
+        "https://api.resend.com/emails",
+        headers={"Authorization": f"Bearer {config.RESEND_API_KEY}"},
+        json={
+            "from": _from_header(),
+            "to": [to_address],
+            "subject": subject,
+            "text": body,
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return True
+
+
+def _send_via_sendgrid(to_address, subject, body):
+    from_addr = config.EMAIL_FROM or config.SMTP_FROM
+    resp = requests.post(
+        "https://api.sendgrid.com/v3/mail/send",
+        headers={
+            "Authorization": f"Bearer {config.SENDGRID_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "personalizations": [{"to": [{"email": to_address}]}],
+            "from": {
+                "email": from_addr,
+                **({"name": config.EMAIL_FROM_NAME} if config.EMAIL_FROM_NAME else {}),
+            },
+            "subject": subject,
+            "content": [{"type": "text/plain", "value": body}],
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return True
+
+
+def _send_via_smtp(to_address, subject, body):
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = _from_header()
+    msg["To"] = to_address
+    with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=15) as server:
+        server.starttls()
+        server.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
+        server.sendmail(config.EMAIL_FROM or config.SMTP_FROM, [to_address], msg.as_string())
+    return True
 
 
 def send_email(to_address, subject, body):
+    """Best-effort — tries providers in priority order and returns True the
+    moment one succeeds. Never raises: a broken email provider should never
+    take down checkout or delivery, it should just mean the customer doesn't
+    get the automated email (the order/delivery itself still goes through)."""
     if not email_enabled():
         return False
-    msg = MIMEText(body)
-    msg["Subject"] = subject
-    msg["From"] = config.SMTP_FROM
-    msg["To"] = to_address
-    try:
-        with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=15) as server:
-            server.starttls()
-            server.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
-            server.sendmail(config.SMTP_FROM, [to_address], msg.as_string())
-        return True
-    except Exception:
-        return False
+    if config.RESEND_API_KEY:
+        try:
+            return _send_via_resend(to_address, subject, body)
+        except Exception:
+            pass
+    if config.SENDGRID_API_KEY:
+        try:
+            return _send_via_sendgrid(to_address, subject, body)
+        except Exception:
+            pass
+    if config.SMTP_HOST and config.SMTP_USERNAME and config.SMTP_PASSWORD:
+        try:
+            return _send_via_smtp(to_address, subject, body)
+        except Exception:
+            pass
+    return False

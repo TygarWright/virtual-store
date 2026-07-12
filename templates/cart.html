@@ -62,17 +62,22 @@
 
         <div class="divider"></div>
 
+        {% if firebase_auth_enabled %}
+        <p class="auth-inline-hint">
+          <a href="#" onclick="openAuthModal(); return false;">Sign in with your phone</a> to fill this in automatically, or continue as a guest below.
+        </p>
+        {% endif %}
         <div class="field">
           <label>Full Name</label>
-          <input type="text" id="cartBuyerName" placeholder="Your name">
+          <input type="text" id="cartBuyerName" placeholder="Your name" value="{{ current_customer_name }}">
         </div>
         <div class="field">
           <label>Email</label>
-          <input type="email" id="cartBuyerEmail" placeholder="you@example.com">
+          <input type="email" id="cartBuyerEmail" placeholder="you@example.com" value="{{ current_customer_email }}">
         </div>
         <div class="field">
           <label>Phone (optional)</label>
-          <input type="tel" id="cartBuyerPhone" placeholder="For faster support">
+          <input type="tel" id="cartBuyerPhone" placeholder="For faster support" value="{{ current_customer_phone }}">
         </div>
 
         <button class="btn btn--full" id="cartCheckoutBtn" data-base-price="{{ subtotal }}" data-currency="{{ settings.currency_symbol }}"

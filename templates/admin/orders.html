@@ -34,6 +34,6 @@
   {% endfor %}
 </table>
 {% else %}
-<div class="empty-state">No orders in this view.</div>
+<div class="empty-state">{% if status_filter or q %}No orders match your filters.{% else %}No orders yet.{% endif %}</div>
 {% endif %}
 {% endblock %}

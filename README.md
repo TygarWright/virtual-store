@@ -14,13 +14,18 @@ server to manage) + vanilla HTML/CSS/JS. No build step, no frontend framework, n
   frameworks, no big images.
 - **Products**: sell any number of virtual products, each with photos, price, and description.
 - **Checkout**: Razorpay handles the actual payment (cards, UPI, netbanking, wallets).
-- **Delivery**: after payment, the order goes into "Awaiting Delivery." You (the admin)
-  manually review each order and send the customer their file/link/code — good for keeping
-  quality control on what goes out.
+- **Phone sign-in (optional)**: customers can verify their number with an SMS one-time code
+  (via Firebase) right from the homepage or at checkout — no password, and it prefills their
+  checkout details next time. Guest checkout (no account) still works either way.
+- **Delivery — manual or automatic, per product**: for each product you choose whether the
+  admin reviews and delivers it by hand ("Manual", the default — good for anything needing
+  quality control), or whether it's delivered the instant payment is confirmed ("Automatic" —
+  good for license keys, download links, anything that doesn't need per-order review).
 - **Order tracking**: customers can check their order status any time using their Order
   Reference + email — no customer accounts needed.
 - **Admin Panel**: edit every piece of text on the site, add/remove homepage sections,
-  manage products and images, and manage orders — all through simple forms, no code.
+  manage products (including their delivery mode) and images, and manage orders — all
+  through simple forms, no code.
 
 ---
 
@@ -76,11 +81,29 @@ Open `.env` (or your hosting provider's Environment Variables page) and fill in:
 | `SECRET_KEY` | Any long random string — keeps admin logins secure. |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | From your Razorpay Dashboard → Settings → API Keys. Needed before customers can pay. |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Your first admin login (change the password inside the site afterwards). |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` | Optional — if filled in, the site automatically emails customers when their order is paid and delivered. If left blank, you just message customers yourself using the details on their order page. |
+| `RESEND_API_KEY` or `SENDGRID_API_KEY` | Optional, recommended. Either one lets the site email customers automatically (order received, delivered) via a simple HTTP API — no SMTP app-password hassle. Free tiers on both. If set, tried before SMTP. |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` | Optional fallback if you'd rather use classic SMTP instead of Resend/SendGrid. If none of these email options are filled in, you just message customers yourself using the details on their order page. |
+| `FIREBASE_API_KEY` and friends | Optional. Enables phone/SMS OTP sign-in so customers can create an account without a password. Leave blank to keep the site guest-checkout-only. See "Phone sign-in setup" below. |
 
 You'll need a **Razorpay account** (https://razorpay.com) — sign up, complete their KYC, and
 get your API keys from the Dashboard. Until this is done, the "Buy Now" button will show
 customers a friendly "payments not set up yet" message instead of breaking.
+
+### Phone sign-in setup (optional, ~5 minutes)
+
+1. Go to [console.firebase.google.com](https://console.firebase.google.com) → Create project (free).
+2. **Build → Authentication → Sign-in method** → enable **Phone**.
+3. **Project settings → General → Your apps** → click the Web icon (`</>`) → register an app →
+   copy the six values shown (`apiKey`, `authDomain`, `projectId`, `appId`,
+   `messagingSenderId`, `storageBucket`) into your `.env` as `FIREBASE_API_KEY` etc.
+4. **Authentication → Settings → Authorized domains** → add your live domain (and
+   `localhost` for local testing — it's there by default).
+5. Restart the app. A "Sign In" link now appears in the navigation; customers who verify
+   their phone get their name/email/phone remembered for next time. Guest checkout (no
+   sign-in) keeps working exactly as before either way.
+
+Firebase's free "Spark" tier includes a small number of free SMS verifications per month;
+beyond that it's pay-as-you-go — check Firebase's current pricing before high-volume use.
 
 ---
 
@@ -94,7 +117,10 @@ Go to **yourwebsite.com/admin/login** and log in.
   **"Mark as Delivered."** That's it — the customer sees it immediately on their tracking page.
 - **Products** — click "Add New Product" to create one: name, price, description, and photos.
   Drag in one or more images; they're automatically resized so your site stays fast. Untick
-  "Visible on the live site" to hide a product without deleting it.
+  "Visible on the live site" to hide a product without deleting it. Under **Delivery**, choose
+  **Manual** (you review and deliver each order by hand — the safe default) or **Automatic**
+  (the download link/code you write is sent the instant payment is confirmed, with zero admin
+  steps — good for anything that doesn't need per-order quality control).
 - **Homepage Sections** — add blocks of text to your homepage (e.g. "Our Story," "Why Us").
   Use the ↑ / ↓ buttons to reorder them, or untick "Show on homepage" to hide one temporarily.
 - **Site Settings** — change your site name, tagline, big homepage headline, About Us text,
@@ -108,11 +134,15 @@ there's no "publish" step to remember.
 
 ## 6. How a sale works, end to end
 
-1. A customer browses your catalogue and clicks "Buy Now" on a product.
+1. A customer browses your catalogue and clicks "Buy Now" on a product (optionally signing
+   in with their phone first, or checking out as a guest).
 2. They enter their name and email and pay via Razorpay (cards/UPI/netbanking/wallets).
-3. Once payment succeeds, their order appears in your **Orders → Awaiting Delivery** list.
-4. You open the order, write the delivery details, and click "Mark as Delivered."
-5. The customer can check progress any time at **yourwebsite.com/track** using their Order
+3. **If the product is set to Automatic delivery**, they get their download link/code
+   immediately — no waiting, no admin step.
+   **If it's set to Manual delivery** (the default), their order appears in your
+   **Orders → Awaiting Delivery** list; open it, write the delivery details, and click
+   "Mark as Delivered."
+4. The customer can check progress any time at **yourwebsite.com/track** using their Order
    Reference + email — no login required.
 
 ---
@@ -120,14 +150,16 @@ there's no "publish" step to remember.
 ## 7. Project structure (for whoever maintains it)
 
 ```
-app.py               → all routes (storefront + admin)
+app.py               → all routes (storefront + admin + phone-auth)
 config.py            → reads settings from .env / environment variables
-database.py          → SQLite schema + seed data
+database.py          → SQLite schema + seed data (products, orders, customers, ...)
 razorpay_client.py   → tiny Razorpay Orders API wrapper + signature verification
-helpers.py           → auth, image resizing, CSRF, optional email sending
+helpers.py           → auth, image resizing, CSRF, email sending (Resend/SendGrid/SMTP),
+                        Firebase ID-token verification
 templates/           → Jinja2 HTML templates (storefront + templates/admin/)
+templates/_auth_modal.html → the phone/OTP sign-in popup, shared across pages
 static/css/style.css → the entire design system (one file, CSS variables)
-static/js/           → checkout flow + (space for any future JS)
+static/js/           → checkout flow, cart, animations, phone-auth (auth.js)
 static/uploads/      → product images live here
 instance/store.db    → the whole database — back this up regularly
 ```

@@ -70,3 +70,29 @@ SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USERNAME)
 # https://dash.cloudflare.com/ -> Turnstile.
 TURNSTILE_SITE_KEY = os.environ.get("TURNSTILE_SITE_KEY", "")
 TURNSTILE_SECRET_KEY = os.environ.get("TURNSTILE_SECRET_KEY", "")
+
+# --- Optional: Firebase Phone Authentication (OTP sign-in / account creation) ---
+# Lets customers verify their phone number with a one-time SMS code, right
+# from the homepage or at checkout, instead of (or alongside) guest checkout.
+# All six values below come from Firebase Console -> Project settings ->
+# General -> "Your apps" -> Web app (</> icon) -> SDK setup and config.
+# They are meant to be public (shipped to the browser) — Firebase's security
+# model relies on backend ID-token verification, not on hiding these.
+# Leave FIREBASE_API_KEY blank to disable phone sign-in entirely; the site
+# works fine as guest-checkout-only without it.
+FIREBASE_API_KEY = os.environ.get("FIREBASE_API_KEY", "")
+FIREBASE_AUTH_DOMAIN = os.environ.get("FIREBASE_AUTH_DOMAIN", "")
+FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "")
+FIREBASE_APP_ID = os.environ.get("FIREBASE_APP_ID", "")
+FIREBASE_MESSAGING_SENDER_ID = os.environ.get("FIREBASE_MESSAGING_SENDER_ID", "")
+FIREBASE_STORAGE_BUCKET = os.environ.get("FIREBASE_STORAGE_BUCKET", "")
+
+# --- Optional: transactional email via SendGrid or Resend (HTTP APIs) ---
+# Preferred over SMTP when set — no app-password hassle, better deliverability,
+# generous free tiers. If both are set, Resend is tried first, then SendGrid,
+# falling back to SMTP (above) if neither is configured. Leave all blank and
+# the site simply skips emailing (admin still sees everything in the panel).
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", SMTP_FROM)
+EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "")

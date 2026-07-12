@@ -54,6 +54,7 @@
         {% elif order.status == 'delivered' %}
           <p>Your order has been delivered:</p>
           <div class="card-box" style="white-space:pre-line;">{{ order.delivery_message }}</div>
+          <p style="margin-top:1.5rem;"><a href="{{ url_for('home') }}#products" class="btn btn--outline btn--sm">Continue Shopping</a></p>
         {% elif order.status == 'cancelled' %}
           <p>This order was cancelled. Please contact us if you have questions.</p>
         {% elif order.status == 'failed' %}

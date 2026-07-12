@@ -55,7 +55,13 @@
 </div>
 {% elif order.status == 'delivered' %}
 <div class="card-box">
-  <h3>Delivery Message Sent</h3>
+  <h3>{{ "Delivered Automatically" if order.auto_delivered else "Delivery Message Sent" }}</h3>
+  {% if order.auto_delivered %}
+  <p class="help-text" style="margin-top:0;">
+    This order matched one or more products set to "Automatic" delivery, so it was delivered
+    the instant payment was confirmed — no admin action was needed.
+  </p>
+  {% endif %}
   <div style="white-space:pre-line;">{{ order.delivery_message }}</div>
 </div>
 {% endif %}

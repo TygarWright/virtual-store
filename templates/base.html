@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0a0a0a">
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>{% block title %}{{ settings.site_name }}{% endblock %}</title>
 <meta name="description" content="{{ settings.meta_description }}">
@@ -15,10 +16,18 @@
 <link rel="sitemap" type="application/xml" href="{{ url_for('sitemap') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<!-- Adobe Fonts (Typekit) — Niagara Regular, used for the brand mark and eyebrow labels.
-     Replace YOUR_KIT_ID below with your own kit ID from https://fonts.adobe.com/my_fonts -->
-<link rel="stylesheet" href="https://use.typekit.net/YOUR_KIT_ID.css">
+{# Adobe Fonts (Typekit) — Niagara Regular, used for the brand mark and eyebrow
+   labels. Only loaded once you set typekit_kit_id below; left unset by
+   default so the site doesn't ship a request to a placeholder/404 URL. Get
+   a kit ID at https://fonts.adobe.com/my_fonts, then hardcode it here. #}
+{% set typekit_kit_id = "" %}
+{% if typekit_kit_id %}<link rel="stylesheet" href="https://use.typekit.net/{{ typekit_kit_id }}.css">{% endif %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% if firebase_auth_enabled %}
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script>window.FIREBASE_CONFIG = {{ firebase_config|tojson }};</script>
+{% endif %}
 {% block head %}{% endblock %}
 </head>
 <body>
@@ -38,6 +47,15 @@
       <a href="{{ url_for('home') }}#products">Shop</a>
       <a href="{{ url_for('home') }}#about">About</a>
       <a href="{{ url_for('track_order') }}">Track Order</a>
+      {% if firebase_auth_enabled %}
+        <a href="#" onclick="openAuthModal(); return false;" data-auth-signed-out
+           style="display:{{ 'none' if (current_customer_name or current_customer_phone) else '' }};">Sign In</a>
+        <form method="POST" action="{{ url_for('auth_logout') }}"
+              style="display:{{ '' if (current_customer_name or current_customer_phone) else 'none' }};">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="nav__account-btn" data-auth-signed-in>{{ current_customer_name or current_customer_phone or 'Account' }}</button>
+        </form>
+      {% endif %}
     </div>
     <a href="{{ url_for('view_cart') }}" class="nav__cart" aria-label="View cart, {{ cart_count }} item{{ 's' if cart_count != 1 else '' }}">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
@@ -52,6 +70,16 @@
     <a href="{{ url_for('home') }}#about">About</a>
     <a href="{{ url_for('track_order') }}">Track Order</a>
     <a href="{{ url_for('view_cart') }}">Cart{% if cart_count > 0 %} ({{ cart_count }}){% endif %}</a>
+    {% if firebase_auth_enabled %}
+      {% if current_customer_name or current_customer_phone %}
+      <form method="POST" action="{{ url_for('auth_logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="nav__account-btn">Sign out ({{ current_customer_name or current_customer_phone }})</button>
+      </form>
+      {% else %}
+      <a href="#" onclick="openAuthModal(); return false;">Sign In</a>
+      {% endif %}
+    {% endif %}
   </div>
 </nav>
 
@@ -72,11 +100,18 @@
 <footer class="footer">
   <div class="container">
     <span>&copy; {{ settings.site_name }} — {{ settings.footer_text }}</span>
-    <span>{{ settings.contact_email }} · {{ settings.contact_phone }}</span>
+    <span>
+      <a href="{{ url_for('track_order') }}">Track Order</a> · {{ settings.contact_email }} · {{ settings.contact_phone }}
+    </span>
   </div>
 </footer>
+<button class="back-to-top" id="backToTop" aria-label="Back to top" onclick="window.scrollTo({top:0,behavior:'smooth'})">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
+</button>
 <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+{% if firebase_auth_enabled %}{% include "_auth_modal.html" %}{% endif %}
 <script src="{{ url_for('static', filename='js/animations.js') }}"></script>
 <script src="{{ url_for('static', filename='js/cart.js') }}"></script>
+{% if firebase_auth_enabled %}<script src="{{ url_for('static', filename='js/auth.js') }}"></script>{% endif %}
 </body>
 </html>

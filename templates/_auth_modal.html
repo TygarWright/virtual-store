@@ -1,0 +1,49 @@
+{# Phone/OTP sign-in modal — included once in base.html, opened from the nav
+   "Account" link or from checkout. Works the same on the landing page and
+   mid-checkout since it's just a floating overlay over whatever page you're on. #}
+<div class="auth-modal" id="authModal" aria-hidden="true">
+  <div class="auth-modal__backdrop" onclick="closeAuthModal()"></div>
+  <div class="auth-modal__panel" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+    <button type="button" class="auth-modal__close" onclick="closeAuthModal()" aria-label="Close">&times;</button>
+
+    <div id="authStepPhone">
+      <h3 id="authModalTitle">Sign in with your phone</h3>
+      <p class="auth-modal__hint">We'll text you a one-time code. No password to remember.</p>
+      <div class="field">
+        <label>Phone Number</label>
+        <input type="tel" id="authPhoneInput" placeholder="+91 98765 43210" autocomplete="tel">
+        <small>Include your country code, e.g. +91 for India.</small>
+      </div>
+      <div id="authRecaptcha"></div>
+      <button type="button" class="btn btn--full" id="authSendCodeBtn" onclick="authSendCode()">Send Code</button>
+      <p class="auth-modal__error" id="authPhoneError"></p>
+    </div>
+
+    <div id="authStepCode" style="display:none;">
+      <h3>Enter the code</h3>
+      <p class="auth-modal__hint">We sent a 6-digit code to <span id="authPhoneDisplay"></span>.</p>
+      <div class="field">
+        <label>Verification Code</label>
+        <input type="text" id="authCodeInput" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="one-time-code">
+      </div>
+      <button type="button" class="btn btn--full" id="authVerifyBtn" onclick="authVerifyCode()">Verify & Continue</button>
+      <button type="button" class="btn btn--outline btn--full" style="margin-top:0.6rem;" onclick="authBackToPhone()">Use a different number</button>
+      <p class="auth-modal__error" id="authCodeError"></p>
+    </div>
+
+    <div id="authStepDetails" style="display:none;">
+      <h3>Almost done</h3>
+      <p class="auth-modal__hint">Add your name and email so we can send your order updates.</p>
+      <div class="field">
+        <label>Full Name</label>
+        <input type="text" id="authNameInput" placeholder="Your name" autocomplete="name">
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="authEmailInput" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <button type="button" class="btn btn--full" id="authFinishBtn" onclick="authFinish()">Create My Account</button>
+      <p class="auth-modal__error" id="authDetailsError"></p>
+    </div>
+  </div>
+</div>

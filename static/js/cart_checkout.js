@@ -149,7 +149,6 @@ async function startCartCheckout() {
       resetCartBtn(btn);
     });
     rzp.open();
-    resetCartBtn(btn);
   } catch (err) {
     showCartError("Network error. Please try again.");
     resetCartBtn(btn);

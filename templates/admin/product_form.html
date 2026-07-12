@@ -42,6 +42,36 @@
   </div>
 
   <div class="card-box">
+    <h3>Delivery</h3>
+    <p class="help-text" style="margin-top:0;">
+      Choose how customers receive this product after payment succeeds.
+    </p>
+    <div class="field">
+      <label>
+        <input type="radio" name="delivery_mode" value="manual" id="deliveryManual"
+               {{ 'checked' if (product is none) or product.delivery_mode != 'automatic' }}
+               onchange="document.getElementById('autoDeliveryBox').style.display='none';" style="width:auto; margin-right:0.5rem;">
+        Manual — I'll review each order and send delivery details myself
+      </label>
+    </div>
+    <div class="field">
+      <label>
+        <input type="radio" name="delivery_mode" value="automatic" id="deliveryAutomatic"
+               {{ 'checked' if product and product.delivery_mode == 'automatic' }}
+               onchange="document.getElementById('autoDeliveryBox').style.display='block';" style="width:auto; margin-right:0.5rem;">
+        Automatic — deliver instantly the moment payment is confirmed
+      </label>
+    </div>
+    <div class="field" id="autoDeliveryBox"
+         style="display:{{ 'block' if product and product.delivery_mode == 'automatic' else 'none' }};">
+      <label>What to send automatically</label>
+      <textarea name="auto_delivery_content" style="min-height:120px;"
+                placeholder="e.g. Download link: https://... &#10;License key: XXXX-XXXX-XXXX">{{ product.auto_delivery_content if product else '' }}</textarea>
+      <small>Sent by email and shown on the customer's order tracking page the instant they pay — no admin step needed. For a one-time-use code (like a license key), remember this same text goes to every buyer unless you also manage stock/uniqueness yourself.</small>
+    </div>
+  </div>
+
+  <div class="card-box">
     <h3>Product Images</h3>
     {% if images %}
     <div class="image-upload-grid">

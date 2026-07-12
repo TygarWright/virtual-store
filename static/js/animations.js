@@ -153,6 +153,15 @@ window.getCsrfToken = function () {
     });
   }
 
+  // ---------- Back to top button ----------
+  var backToTop = document.getElementById("backToTop");
+  if (backToTop) {
+    if (window.scrollY > 400) backToTop.classList.add("visible");
+    window.addEventListener("scroll", function () {
+      backToTop.classList.toggle("visible", window.scrollY > 400);
+    }, { passive: true });
+  }
+
   // ---------- Product gallery crossfade ----------
   window.swapGalleryImage = function (src, thumbEl) {
     var main = document.getElementById("mainImage");
