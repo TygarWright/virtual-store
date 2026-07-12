@@ -94,7 +94,12 @@
     </div>
     {% else %}
     <div class="empty-state">
-      Your cart is empty. <a href="{{ url_for('home') }}#products" style="text-decoration:underline;">Browse the catalogue</a> to find something you'll love.
+      <div class="empty-state__icon">
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M5 7h14l-1.5 9a2 2 0 0 1-2 1.7H8.5a2 2 0 0 1-2-1.7L5 7z"></path><path d="M5 7L4 3H2"></path><circle cx="9" cy="21" r="1"></circle><circle cx="17" cy="21" r="1"></circle></svg>
+      </div>
+      <h3>Your cart is empty</h3>
+      <p>Browse the catalogue to find something you'll love.</p>
+      <a href="{{ url_for('home') }}#products" class="btn btn--outline">Browse the Catalogue</a>
     </div>
     {% endif %}
   </div>

@@ -24,6 +24,25 @@
   </div>
 </div>
 
+<div class="feature-strip">
+  <div class="feature-strip__item">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="11" width="18" height="10" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+    Secure Razorpay Checkout
+  </div>
+  <div class="feature-strip__item">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+    Instant Digital Delivery
+  </div>
+  <div class="feature-strip__item">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
+    Track Orders Anytime
+  </div>
+  <div class="feature-strip__item">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+    Dedicated Support
+  </div>
+</div>
+
 {% for section in sections %}
 <section class="section {{ 'section--invert' if loop.index is odd else '' }}">
   <div class="container">
@@ -104,9 +123,16 @@
     </div>
     {% else %}
     <div class="empty-state">
-      {% if search_query %}No products match &ldquo;{{ search_query }}&rdquo;. Try a different search, or <a href="{{ url_for('home') }}#products" style="text-decoration:underline;">browse everything</a>.
-      {% elif active_category %}No products in "{{ active_category }}" right now. <a href="{{ url_for('home') }}#products" style="text-decoration:underline;">View all products</a>.
-      {% else %}Nothing here yet — check back soon.{% endif %}
+      <div class="empty-state__icon">
+        {% if search_query %}
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="8" y1="8" x2="14" y2="14"></line><line x1="14" y1="8" x2="8" y2="14"></line></svg>
+        {% else %}
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 3h18v18H3z"></path><path d="M3 9h18M9 3v18"></path></svg>
+        {% endif %}
+      </div>
+      <h3>{% if search_query %}No matches found{% elif active_category %}Nothing in this category{% else %}Nothing here yet{% endif %}</h3>
+      <p>{% if search_query %}No products match "{{ search_query }}". Try a different search.{% elif active_category %}No products in "{{ active_category }}" right now.{% else %}Check back soon for new arrivals.{% endif %}</p>
+      <a href="{{ url_for('home') }}#products" class="btn btn--outline">Browse Everything</a>
     </div>
     {% endif %}
   </div>

@@ -204,6 +204,37 @@ def home():
     )
 
 
+@app.route("/api/search")
+def api_search():
+    """Instant search for the nav search dropdown. Returns JSON."""
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return jsonify({"results": []})
+    conn = db.get_db()
+    like = f"%{q}%"
+    products = conn.execute(
+        """SELECT id, name, slug, category, price FROM products
+           WHERE active = 1 AND (name LIKE ? OR short_description LIKE ? OR category LIKE ?)
+           ORDER BY position ASC, id DESC LIMIT 8""",
+        (like, like, like),
+    ).fetchall()
+    results = []
+    for p in products:
+        img = conn.execute(
+            "SELECT filename FROM product_images WHERE product_id = ? ORDER BY position ASC LIMIT 1",
+            (p["id"],),
+        ).fetchone()
+        results.append({
+            "name": p["name"],
+            "slug": p["slug"],
+            "category": p["category"],
+            "price": p["price"],
+            "image": img["filename"] if img else None,
+        })
+    conn.close()
+    return jsonify({"results": results})
+
+
 @app.route("/product/<slug>")
 def product_detail(slug):
     conn = db.get_db()

@@ -128,6 +128,36 @@ p { margin: 0 0 1em; color: var(--grey-700); }
 .nav__search button { border: none; background: transparent; color: var(--grey-700); cursor: pointer; display: flex; padding: 0.2rem; flex-shrink: 0; }
 .nav__search button:hover { color: var(--black); }
 
+/* Live search dropdown */
+.nav__search-wrap { position: relative; flex: 1; max-width: 280px; }
+.search-dropdown {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: 4px; box-shadow: 0 12px 32px rgba(0,0,0,0.12);
+  max-height: 400px; overflow-y: auto; z-index: 100;
+  display: none; opacity: 0; transform: translateY(-4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.search-dropdown.open { display: block; opacity: 1; transform: translateY(0); }
+.search-dropdown__item {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.search-dropdown__item:last-child { border-bottom: none; }
+.search-dropdown__item:hover, .search-dropdown__item.active { background: var(--grey-50); }
+.search-dropdown__thumb { width: 36px; height: 44px; object-fit: cover; flex-shrink: 0; border-radius: 2px; }
+.search-dropdown__placeholder { width: 36px; height: 44px; flex-shrink: 0; background: var(--grey-100); display: flex; align-items: center; justify-content: center; font-family: var(--serif); font-size: 0.9rem; color: var(--grey-500); border-radius: 2px; }
+.search-dropdown__info { flex: 1; min-width: 0; }
+.search-dropdown__name { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-dropdown__cat { font-family: var(--display); font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--grey-500); }
+.search-dropdown__price { font-family: var(--display); font-size: 0.82rem; color: var(--grey-700); flex-shrink: 0; }
+.search-dropdown__empty { padding: 1.25rem 0.9rem; text-align: center; font-size: 0.82rem; color: var(--grey-500); }
+.search-dropdown__footer { padding: 0.6rem 0.9rem; border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--grey-500); text-align: center; }
+.search-dropdown__footer kbd { font-family: var(--sans); font-size: 0.7rem; border: 1px solid var(--border); border-radius: 3px; padding: 0.1rem 0.35rem; }
+@media (max-width: 900px) { .nav__search-wrap { max-width: none; } }
+@media (max-width: 560px) { .nav__search-wrap { display: none; } }
+
 /* ---------- Typing spark ----------
    A tiny row of three dots that lives beside the search field. It's invisible
    at rest, eases in the moment the person starts typing, breathes softly
@@ -582,6 +612,56 @@ body.menu-open { overflow: hidden; }
   .marquee__track, .admin-main {
     animation: none !important; transition: none !important; opacity: 1 !important; transform: none !important;
   }
+}
+
+/* ---------- Page fade-in transition ---------- */
+@keyframes pageFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+#main { animation: pageFadeIn 0.4s var(--ease); }
+@media (prefers-reduced-motion: reduce) { #main { animation: none; } }
+
+/* ---------- Image blur-up progressive loading ---------- */
+.card__image img, .product-gallery__main img {
+  filter: blur(8px); transform: scale(1.02);
+  transition: filter 0.5s ease, transform 0.5s ease;
+}
+.card__image img.loaded, .product-gallery__main img.loaded {
+  filter: blur(0); transform: scale(1);
+}
+.card:hover .card__image img.loaded { transform: scale(1.04); }
+
+/* ---------- Enhanced empty states ---------- */
+.empty-state { text-align: center; padding: 4rem 1rem; color: var(--grey-500); }
+.empty-state__icon { margin-bottom: 1.5rem; color: var(--grey-300); }
+.empty-state h3 { font-family: var(--serif); font-size: 1.3rem; color: var(--grey-700); margin-bottom: 0.5rem; }
+.empty-state p { font-size: 0.9rem; margin-bottom: 1.5rem; }
+
+/* ---------- 404 page ---------- */
+.error-404 { padding: 8rem 0; text-align: center; position: relative; overflow: hidden; }
+.error-404__big {
+  font-family: var(--display); font-size: clamp(6rem, 16vw, 12rem);
+  line-height: 1; letter-spacing: 0.02em; color: var(--black); opacity: 0.08;
+  margin: 0; user-select: none;
+}
+.error-404 .eyebrow { margin-bottom: 0.5rem; }
+.error-404 h1 { font-size: clamp(1.8rem, 4vw, 2.6rem); margin-bottom: 1rem; }
+.error-404 p { max-width: 420px; margin: 0 auto 2rem; }
+
+/* ---------- Product card 3D tilt ---------- */
+.card { transform-style: preserve-3d; perspective: 800px; }
+.card.tilting { transition: transform 0.1s ease; }
+.card.tilting .card__image img { transition: transform 0.1s ease; }
+
+/* ---------- Feature strip ---------- */
+.feature-strip {
+  display: flex; justify-content: center; flex-wrap: wrap;
+  gap: 2.5rem; padding: 2.5rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.feature-strip__item { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; color: var(--grey-700); letter-spacing: 0.02em; }
+.feature-strip__item svg { flex-shrink: 0; color: var(--grey-500); }
+@media (max-width: 560px) {
+  .feature-strip { gap: 1.5rem; padding: 2rem 1rem; }
+  .feature-strip__item { font-size: 0.75rem; gap: 0.5rem; }
 }
 
 /* ============================================================

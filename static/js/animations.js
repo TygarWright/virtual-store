@@ -236,3 +236,139 @@ window.getCsrfToken = function () {
     });
   });
 })();
+
+/* ============================================================
+ Live search dropdown — instant results as you type
+ ============================================================ */
+(function () {
+"use strict";
+var input = document.getElementById("navSearchInput");
+var dropdown = document.getElementById("searchDropdown");
+if (!input || !dropdown) return;
+var debounceTimer = null;
+var activeIndex = -1;
+var currentResults = [];
+
+function render(results) {
+  currentResults = results;
+  activeIndex = -1;
+  if (!results.length) {
+    dropdown.innerHTML = '<div class="search-dropdown__empty">No products found. Try another search.</div>';
+    dropdown.classList.add("open");
+    return;
+  }
+  var html = results.map(function (r, i) {
+    var img = r.image
+      ? '<img class="search-dropdown__thumb" src="/static/uploads/' + r.image + '" alt="" loading="lazy">'
+      : '<div class="search-dropdown__placeholder">' + (r.name[0] || "?") + "</div>";
+    var cat = r.category ? '<div class="search-dropdown__cat">' + r.category + "</div>" : "";
+    return '<a class="search-dropdown__item" href="/product/' + r.slug + '" role="option" data-index="' + i + '">' +
+      img +
+      '<div class="search-dropdown__info"><div class="search-dropdown__name">' + r.name + "</div>" + cat + "</div>" +
+      '<div class="search-dropdown__price">&#8377;' + r.price.toLocaleString("en-IN") + "</div>" +
+      "</a>";
+  }).join("");
+  html += '<div class="search-dropdown__footer">Press <kbd>Enter</kbd> for all results</div>';
+  dropdown.innerHTML = html;
+  dropdown.classList.add("open");
+}
+
+function close() {
+  dropdown.classList.remove("open");
+  activeIndex = -1;
+}
+
+input.addEventListener("input", function () {
+  var q = input.value.trim();
+  clearTimeout(debounceTimer);
+  if (q.length < 2) { close(); return; }
+  debounceTimer = setTimeout(function () {
+    fetch("/api/search?q=" + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (data) { render(data.results || []); })
+      .catch(function () { close(); });
+  }, 180);
+});
+
+input.addEventListener("focus", function () {
+  if (input.value.trim().length >= 2 && currentResults.length) {
+    dropdown.classList.add("open");
+  }
+});
+
+input.addEventListener("keydown", function (e) {
+  var items = dropdown.querySelectorAll(".search-dropdown__item");
+  if (!items.length) return;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    activeIndex = Math.min(activeIndex + 1, items.length - 1);
+    updateActive(items);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    activeIndex = Math.max(activeIndex - 1, 0);
+    updateActive(items);
+  } else if (e.key === "Escape") {
+    close();
+    input.blur();
+  }
+});
+
+function updateActive(items) {
+  items.forEach(function (el, i) {
+    el.classList.toggle("active", i === activeIndex);
+    if (i === activeIndex) el.scrollIntoView({ block: "nearest" });
+  });
+}
+
+document.addEventListener("click", function (e) {
+  if (!e.target.closest(".nav__search")) close();
+});
+})();
+
+/* ============================================================
+ Keyboard shortcut: / to focus search
+ ============================================================ */
+(function () {
+"use strict";
+document.addEventListener("keydown", function (e) {
+  if (e.key !== "/" || e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+  var input = document.getElementById("navSearchInput");
+  if (input) { e.preventDefault(); input.focus(); }
+});
+})();
+
+/* ============================================================
+ Image blur-up — add .loaded when images finish loading
+ ============================================================ */
+(function () {
+"use strict";
+function markLoaded(img) {
+  if (img.complete) { img.classList.add("loaded"); return; }
+  img.addEventListener("load", function () { img.classList.add("loaded"); });
+  if (img.naturalWidth > 0) img.classList.add("loaded");
+}
+document.querySelectorAll(".card__image img, .product-gallery__main img").forEach(markLoaded);
+})();
+
+/* ============================================================
+ Product card 3D tilt on hover (desktop only)
+ ============================================================ */
+(function () {
+"use strict";
+if (window.matchMedia("(hover: none), (pointer: coarse)").matches) return;
+if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+document.querySelectorAll(".card").forEach(function (card) {
+  card.addEventListener("mouseenter", function () { card.classList.add("tilting"); });
+  card.addEventListener("mousemove", function (e) {
+    if (!card.classList.contains("tilting")) return;
+    var rect = card.getBoundingClientRect();
+    var x = (e.clientX - rect.left) / rect.width - 0.5;
+    var y = (e.clientY - rect.top) / rect.height - 0.5;
+    card.style.transform = "translateY(-4px) perspective(800px) rotateX(" + (-y * 4) + "deg) rotateY(" + (x * 4) + "deg)";
+  });
+  card.addEventListener("mouseleave", function () {
+    card.classList.remove("tilting");
+    card.style.transform = "";
+  });
+});
+})();
