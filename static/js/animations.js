@@ -372,3 +372,81 @@ document.querySelectorAll(".card").forEach(function (card) {
   });
 });
 })();
+
+/* ============================================================
+ Cart hover preview — fetch and show cart contents on hover
+ ============================================================ */
+(function () {
+"use strict";
+var wrap = document.querySelector(".nav__cart-wrap");
+var preview = document.getElementById("cartPreview");
+if (!wrap || !preview) return;
+var loaded = false;
+var loading = false;
+var hideTimer = null;
+
+function loadCart() {
+  if (loading) return;
+  loading = true;
+  fetch("/api/cart/preview")
+    .then(function (r) { return r.json(); })
+    .then(function (data) { renderCart(data); loaded = true; loading = false; })
+    .catch(function () { loading = false; });
+}
+
+function renderCart(data) {
+  if (!data.items || !data.items.length) {
+    preview.innerHTML = '<div class="cart-preview__empty">Your cart is empty.<br><a href="/#products" style="color:var(--grey-700);text-decoration:underline;">Browse products</a></div>';
+    return;
+  }
+  var html = '<div class="cart-preview__header">Your Cart (' + data.count + ')</div>';
+  html += data.items.map(function (it) {
+    var img = it.image
+      ? '<img class="cart-preview__thumb" src="/static/uploads/' + it.image + '" alt="">'
+      : '<div class="cart-preview__placeholder">' + (it.name[0] || "?") + "</div>";
+    return '<div class="cart-preview__item">' +
+      img +
+      '<div class="cart-preview__info"><div class="cart-preview__name">' + it.name + '</div><div class="cart-preview__qty">Qty: ' + it.quantity + '</div></div>' +
+      '<div class="cart-preview__price">&#8377;' + it.line_total.toLocaleString("en-IN") + '</div>' +
+      '</div>';
+  }).join("");
+  html += '<div class="cart-preview__footer">';
+  html += '<div class="cart-preview__subtotal"><span>Subtotal</span><strong>&#8377;' + data.subtotal.toLocaleString("en-IN") + '</strong></div>';
+  html += '<a href="/cart" class="btn btn--full btn--sm">View Cart & Checkout</a>';
+  html += '</div>';
+  preview.innerHTML = html;
+}
+
+wrap.addEventListener("mouseenter", function () {
+  clearTimeout(hideTimer);
+  if (!loaded) loadCart();
+  preview.classList.add("open");
+});
+wrap.addEventListener("mouseleave", function () {
+  hideTimer = setTimeout(function () { preview.classList.remove("open"); }, 200);
+});
+// Re-load cart after add-to-cart
+document.addEventListener("submit", function (e) {
+  if (e.target && e.target.classList && e.target.classList.contains("add-to-cart-form")) {
+    loaded = false;
+  }
+});
+})();
+
+/* ============================================================
+ Cookie consent banner
+ ============================================================ */
+(function () {
+"use strict";
+var banner = document.getElementById("cookieBanner");
+if (!banner) return;
+var choice = null;
+try { choice = localStorage.getItem("cookieConsent"); } catch (e) {}
+if (!choice) {
+  setTimeout(function () { banner.classList.add("show"); }, 800);
+}
+window.dismissCookie = function (val) {
+  try { localStorage.setItem("cookieConsent", val); } catch (e) {}
+  banner.classList.remove("show");
+};
+})();

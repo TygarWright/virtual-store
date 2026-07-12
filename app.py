@@ -378,6 +378,29 @@ def api_create_order():
     })
 
 
+@app.route("/api/cart/preview")
+def api_cart_preview():
+    """Return cart items for the nav hover preview dropdown."""
+    conn = db.get_db()
+    items, subtotal = get_cart_items(conn)
+    result = []
+    for it in items:
+        img = conn.execute(
+            "SELECT filename FROM product_images WHERE product_id = ? ORDER BY position ASC LIMIT 1",
+            (it["product"]["id"],),
+        ).fetchone()
+        result.append({
+            "name": it["product"]["name"],
+            "slug": it["product"]["slug"],
+            "quantity": it["quantity"],
+            "price": it["product"]["price"],
+            "line_total": it["line_total"],
+            "image": img["filename"] if img else None,
+        })
+    conn.close()
+    return jsonify({"items": result, "subtotal": subtotal, "count": sum(it["quantity"] for it in items)})
+
+
 @app.route("/cart")
 def view_cart():
     conn = db.get_db()
