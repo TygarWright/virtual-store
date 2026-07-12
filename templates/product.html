@@ -80,9 +80,9 @@
       </form>
 
       <div id="buyForm">
-        {% if firebase_auth_enabled %}
+        {% if not customer_logged_in %}
         <p class="auth-inline-hint">
-          <a href="#" onclick="openAuthModal(); return false;">Sign in with your phone</a> to fill this in automatically, or continue as a guest below.
+          <a href="#" onclick="openAuthModal(); return false;">Sign in with your phone</a> for instant checkout, or continue as a guest below.
         </p>
         {% endif %}
         <div class="field">
@@ -173,4 +173,25 @@
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script>const RAZORPAY_KEY = "{{ razorpay_key }}";</script>
 <script src="{{ url_for('static', filename='js/checkout.js') }}"></script>
+<script>
+// Track recently viewed products in localStorage
+(function() {
+  var product = {
+    id: {{ product.id }},
+    name: {{ product.name|tojson }},
+    slug: {{ product.slug|tojson }},
+    price: {{ product.price }},
+    currency: {{ settings.currency_symbol|tojson }},
+    image: {{ (product_images and product_images[0])|tojson if product_images else 'null' }},
+    category: {{ (product.category or '')|tojson }}
+  };
+  try {
+    var viewed = JSON.parse(localStorage.getItem("recentlyViewed") || "[]");
+    viewed = viewed.filter(function(p) { return p.id !== product.id; });
+    viewed.unshift(product);
+    viewed = viewed.slice(0, 8);
+    localStorage.setItem("recentlyViewed", JSON.stringify(viewed));
+  } catch(e) {}
+})();
+</script>
 {% endblock %}

@@ -8,7 +8,12 @@
     <span class="eyebrow">{{ settings.site_tagline }}</span>
     <h1>{{ settings.hero_title }}</h1>
     <p>{{ settings.hero_subtitle }}</p>
-    <a href="#products" class="btn">Explore the Catalogue</a>
+    <div class="hero__cta-group">
+      <a href="#products" class="btn">Explore the Catalogue</a>
+      {% if not customer_logged_in %}
+      <a href="#" onclick="openAuthModal(); return false;" class="btn btn--outline hero__cta-secondary">Join with Phone</a>
+      {% endif %}
+    </div>
     <div class="hero__scroll-cue">
       <a href="#products" aria-label="Scroll to products">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 5v14M5 12l7 7 7-7"></path></svg>
@@ -138,6 +143,17 @@
   </div>
 </section>
 
+<!-- Recently viewed - powered by localStorage, no backend needed -->
+<section class="section section--tight" id="recently-viewed" style="display:none;">
+  <div class="container">
+    <div class="section-head reveal">
+      <span class="eyebrow">Pick up where you left off</span>
+      <h2>Recently Viewed</h2>
+    </div>
+    <div class="grid" id="recentlyViewedGrid"></div>
+  </div>
+</section>
+
 <section class="section section--tight" id="about">
   <div class="container reveal" style="max-width:720px; text-align:center;">
     <span class="eyebrow">{{ settings.about_title }}</span>
@@ -199,4 +215,58 @@
   </div>
 </section>
 
+{% endblock %}
+{% block scripts %}
+<script>
+// Render recently viewed products on the homepage
+(function() {
+  try {
+    var viewed = JSON.parse(localStorage.getItem("recentlyViewed") || "[]");
+    if (viewed.length < 2) return;
+    var section = document.getElementById("recently-viewed");
+    var grid = document.getElementById("recentlyViewedGrid");
+    if (!section || !grid) return;
+    viewed.slice(0, 4).forEach(function(p) {
+      var card = document.createElement("div");
+      card.className = "card reveal";
+      var imgHtml = p.image
+        ? '<img src="/static/uploads/' + p.image + '" alt="' + p.name + '" loading="lazy" width="400" height="500">'
+        : '<div class="card__placeholder">' + p.name.charAt(0).toUpperCase() + '</div>';
+      card.innerHTML =
+        '<a class="card__link" href="/product/' + p.slug + '">' +
+          '<div class="card__image">' + imgHtml + '</div>' +
+          (p.category ? '<div class="card__category">' + p.category + '</div>' : '') +
+          '<div class="card__title">' + p.name + '</div>' +
+          '<div class="card__price">' + p.currency + p.price.toLocaleString() + '</div>' +
+        '</a>';
+      grid.appendChild(card);
+    });
+    section.style.display = "block";
+  } catch(e) {}
+})();
+</script>
+{% if not customer_logged_in %}
+<div class="signup-prompt" id="signupPrompt">
+  <button class="signup-prompt__close" onclick="dismissSignupPrompt()" aria-label="Close">&times;</button>
+  <span class="signup-prompt__text"><strong>Unlock member perks.</strong> Sign in with your phone for instant checkout and exclusive deals.</span>
+  <button class="btn btn--invert" onclick="dismissSignupPrompt(); openAuthModal();">Sign In Now</button>
+</div>
+<script>
+(function() {
+  var dismissed = false;
+  try { dismissed = localStorage.getItem("signupPromptDismissed"); } catch(e) {}
+  if (!dismissed) {
+    setTimeout(function() {
+      var p = document.getElementById("signupPrompt");
+      if (p) p.classList.add("show");
+    }, 6000);
+  }
+  window.dismissSignupPrompt = function() {
+    var p = document.getElementById("signupPrompt");
+    if (p) p.classList.remove("show");
+    try { localStorage.setItem("signupPromptDismissed", "1"); } catch(e) {}
+  };
+})();
+</script>
+{% endif %}
 {% endblock %}

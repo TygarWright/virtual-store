@@ -96,3 +96,10 @@ RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
 EMAIL_FROM = os.environ.get("EMAIL_FROM", SMTP_FROM)
 EMAIL_FROM_NAME = os.environ.get("EMAIL_FROM_NAME", "")
+
+# --- Optional: SMS gateway for OTP delivery ---
+# When SMS_GATEWAY is "dev", OTP codes are returned to the frontend (shown in
+# the UI) so you can test the full flow without an SMS provider. Set to "twilio"
+# or another provider when ready for real SMS. Leave blank to default to "dev".
+OTP_EXPIRY_MINUTES = int(os.environ.get("OTP_EXPIRY_MINUTES", "5"))
+OTP_DEV_MODE = os.environ.get("OTP_DEV_MODE", "true").lower() == "true"

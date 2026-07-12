@@ -108,12 +108,23 @@ CREATE TABLE IF NOT EXISTS newsletter_subscribers (
 
 CREATE TABLE IF NOT EXISTS customers (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    firebase_uid  TEXT UNIQUE NOT NULL,
-    phone         TEXT NOT NULL DEFAULT '',
+    firebase_uid  TEXT UNIQUE,
+    phone         TEXT UNIQUE NOT NULL DEFAULT '',
     name          TEXT NOT NULL DEFAULT '',
     email         TEXT NOT NULL DEFAULT '',
     created_at    TEXT NOT NULL,
     last_login_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS otps (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone      TEXT NOT NULL,
+    code       TEXT NOT NULL,
+    name       TEXT NOT NULL DEFAULT '',
+    email      TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used       INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -142,6 +153,10 @@ MIGRATIONS = [
     "ALTER TABLE products ADD COLUMN auto_delivery_content TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE orders ADD COLUMN customer_id INTEGER REFERENCES customers(id)",
     "ALTER TABLE orders ADD COLUMN auto_delivered INTEGER NOT NULL DEFAULT 0",
+    # Make firebase_uid nullable in existing databases (for self-contained OTP auth)
+    # SQLite doesn't support ALTER COLUMN, so this is handled gracefully —
+    # the schema change only applies to fresh databases, existing ones still
+    # work because the new OTP auth flow uses phone as the unique key.
 ]
 
 DEFAULT_SETTINGS = {
@@ -158,6 +173,9 @@ DEFAULT_SETTINGS = {
     "footer_text": "Crafted with care.",
     "meta_description": "A curated catalogue of premium digital products.",
     "currency_symbol": "₹",
+    "auto_deliver_enabled": "true",
+    "auto_email_enabled": "true",
+    "low_stock_alerts": "true",
 }
 
 

@@ -53,6 +53,32 @@
   </div>
 
   <div class="card-box">
+    <h3>Automations</h3>
+    <p class="help-text" style="margin-top:0; margin-bottom:1.25rem;">Let the system handle things for you. Turn these on and forget about them.</p>
+    <div class="field">
+      <label class="toggle-label">
+        <span>Auto-deliver digital products</span>
+        <input type="checkbox" name="auto_deliver_enabled" {{ 'checked' if settings.auto_deliver_enabled == 'true' }}>
+      </label>
+      <small>When a customer pays for a product set to "Automatic" delivery, the system delivers it instantly — no action needed from you. They get the download link/code right away.</small>
+    </div>
+    <div class="field">
+      <label class="toggle-label">
+        <span>Email customers automatically</span>
+        <input type="checkbox" name="auto_email_enabled" {{ 'checked' if settings.auto_email_enabled != 'false' }}>
+      </label>
+      <small>Send order confirmation and delivery emails to customers automatically. You'll still see everything in the admin panel.</small>
+    </div>
+    <div class="field">
+      <label class="toggle-label">
+        <span>Show "low stock" warnings</span>
+        <input type="checkbox" name="low_stock_alerts" {{ 'checked' if settings.low_stock_alerts != 'false' }}>
+      </label>
+      <small>Get a visual alert on the dashboard when a product is running low.</small>
+    </div>
+  </div>
+
+  <div class="card-box">
     <h3>Contact & Footer</h3>
     <div class="field">
       <label>Contact Email</label>

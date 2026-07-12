@@ -62,9 +62,9 @@
 
         <div class="divider"></div>
 
-        {% if firebase_auth_enabled %}
+        {% if not customer_logged_in %}
         <p class="auth-inline-hint">
-          <a href="#" onclick="openAuthModal(); return false;">Sign in with your phone</a> to fill this in automatically, or continue as a guest below.
+          <a href="#" onclick="openAuthModal(); return false;">Sign in with your phone</a> for instant checkout, or continue as a guest below.
         </p>
         {% endif %}
         <div class="field">

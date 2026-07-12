@@ -4,6 +4,7 @@ import time
 import secrets
 import smtplib
 import threading
+from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from functools import wraps
 
@@ -261,6 +262,44 @@ def delete_file_quietly(filename):
         os.remove(os.path.join(config.UPLOAD_FOLDER, filename))
     except OSError:
         pass
+
+
+# ---------- OTP (self-contained, no external service needed) ----------
+
+def generate_otp_code():
+    """Random 6-digit numeric code."""
+    return f"{secrets.randbelow(1000000):06d}"
+
+
+def store_otp(conn, phone, code, name="", email=""):
+    """Store an OTP in the database with an expiry. Invalidates any previous
+    unused OTPs for the same phone first, so only the latest one works."""
+    from datetime import timedelta
+    now_str = datetime.now(timezone.utc).isoformat()
+    expires = (datetime.now(timezone.utc) + timedelta(minutes=config.OTP_EXPIRY_MINUTES)).isoformat()
+    conn.execute("UPDATE otps SET used = 1 WHERE phone = ? AND used = 0", (phone,))
+    conn.execute(
+        "INSERT INTO otps (phone, code, name, email, created_at, expires_at, used) VALUES (?, ?, ?, ?, ?, ?, 0)",
+        (phone, code, name, email, now_str, expires),
+    )
+
+
+def verify_otp_code(conn, phone, code):
+    """Check whether the given code matches the latest unused, unexpired OTP
+    for this phone. Returns (True, stored_name, stored_email) on success,
+    (False, "", "") on failure. Marks the OTP as used on success."""
+    row = conn.execute(
+        "SELECT * FROM otps WHERE phone = ? AND code = ? AND used = 0 ORDER BY id DESC LIMIT 1",
+        (phone, code),
+    ).fetchone()
+    if not row:
+        return False, "", ""
+    # Check expiry
+    now_str = datetime.now(timezone.utc).isoformat()
+    if row["expires_at"] < now_str:
+        return False, "", ""
+    conn.execute("UPDATE otps SET used = 1 WHERE id = ?", (row["id"],))
+    return True, row["name"], row["email"]
 
 
 # ---------- Email (optional — Resend or SendGrid preferred, SMTP fallback) ----------

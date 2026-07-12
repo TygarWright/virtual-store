@@ -156,7 +156,10 @@ p { margin: 0 0 1em; color: var(--grey-700); }
 .search-dropdown__footer { padding: 0.6rem 0.9rem; border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--grey-500); text-align: center; }
 .search-dropdown__footer kbd { font-family: var(--sans); font-size: 0.7rem; border: 1px solid var(--border); border-radius: 3px; padding: 0.1rem 0.35rem; }
 @media (max-width: 900px) { .nav__search-wrap { max-width: none; } }
-@media (max-width: 560px) { .nav__search-wrap { display: none; } }
+@media (max-width: 560px) {
+  .nav__search { display: none; }
+  .nav__brand { font-size: 1.2rem; }
+}
 
 /* ---------- Typing spark ----------
    A tiny row of three dots that lives beside the search field. It's invisible
@@ -509,7 +512,7 @@ p { margin: 0 0 1em; color: var(--grey-700); }
   .nav__toggle { display: flex; }
 }
 @media (max-width: 560px) {
-  .nav__search { display: none; }
+  .nav__links { gap: 1rem; font-size: 0.72rem; }
 }
 
 /* ============================================================
@@ -695,7 +698,7 @@ body.menu-open { overflow: hidden; }
 .cart-preview__subtotal { display: flex; justify-content: space-between; margin-bottom: 0.75rem; font-size: 0.85rem; }
 .cart-preview__subtotal strong { font-family: var(--display); font-weight: normal; letter-spacing: 0.04em; }
 .cart-preview__empty { padding: 1.75rem 1rem; text-align: center; font-size: 0.85rem; color: var(--grey-500); }
-@media (max-width: 560px) { .cart-preview { display: none !important; } }
+@media (max-width: 560px) { .cart-preview { width: calc(100vw - 2rem); right: -0.5rem; } }
 
 /* ---------- Footer policy links ---------- */
 .footer__policies { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-top: 0.5rem; }
@@ -925,4 +928,557 @@ body.menu-open { overflow: hidden; }
 .auth-modal__close:hover { color: var(--black); }
 .auth-modal__error {
   color: #7a2222; font-size: 0.82rem; margin-top: 0.75rem; display: none;
+}
+
+/* ============================================================
+   NEW: Auth modal steps, OTP inputs, success animation
+   ============================================================ */
+.auth-step { display: none; animation: authStepIn 0.35s var(--ease); }
+.auth-step--active { display: block; }
+@keyframes authStepIn {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+.auth-modal__icon {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--grey-100); display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 1.25rem; color: var(--black);
+}
+.auth-modal__hint { font-size: 0.85rem; color: var(--grey-700); margin: 0 0 1.25rem; line-height: 1.55; }
+.auth-modal__hint strong { color: var(--black); font-weight: 600; }
+.auth-modal__phone { font-weight: 600; color: var(--black); }
+.auth-modal__legal { font-size: 0.72rem; color: var(--grey-500); margin-top: 1rem; line-height: 1.5; }
+.auth-modal__optional { color: var(--grey-500); font-weight: 400; }
+.auth-modal__row { display: flex; justify-content: space-between; margin-top: 0.85rem; }
+.auth-modal__link {
+  background: none; border: none; color: var(--grey-700); cursor: pointer;
+  font-family: var(--sans); font-size: 0.8rem; text-decoration: underline;
+  text-underline-offset: 2px; padding: 0;
+}
+.auth-modal__link:hover { color: var(--black); }
+body.auth-modal-open { overflow: hidden; }
+
+/* OTP digit inputs */
+.auth-otp-inputs {
+  display: flex; gap: 0.5rem; justify-content: center; margin: 1.25rem 0;
+}
+.auth-otp-inputs input {
+  width: 44px; height: 56px; text-align: center;
+  font-family: var(--sans); font-size: 1.4rem; font-weight: 600;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--white); color: var(--black);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.auth-otp-inputs input:focus {
+  outline: none; border-color: var(--black);
+  box-shadow: 0 0 0 3px rgba(10,10,10,0.08);
+}
+.auth-otp-inputs input:focus { border-color: var(--black); }
+@media (max-width: 400px) {
+  .auth-otp-inputs { gap: 0.35rem; }
+  .auth-otp-inputs input { width: 38px; height: 50px; font-size: 1.2rem; }
+}
+.auth-otp-shake { animation: authShake 0.4s ease; }
+@keyframes authShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+.auth-otp-dev-hint {
+  text-align: center; font-size: 0.82rem; color: var(--grey-500);
+  background: var(--grey-50); padding: 0.6rem; border-radius: 4px; margin-bottom: 1rem;
+}
+.auth-otp-dev-hint strong { color: var(--black); font-size: 1.1rem; letter-spacing: 0.1em; }
+
+/* Success check animation */
+.auth-step--success { text-align: center; padding: 1rem 0; }
+.auth-success-check {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: #234d23; color: var(--white);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 1.5rem;
+  animation: authSuccessPop 0.5s var(--ease);
+}
+@keyframes authSuccessPop {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ============================================================
+   NEW: User greeting banner
+   ============================================================ */
+.user-greeting {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 55;
+  background: linear-gradient(135deg, var(--black), var(--grey-700));
+  color: var(--white); text-align: center;
+  padding: 0.5rem 1rem; font-size: 0.82rem;
+  transform: translateY(-100%); transition: transform 0.4s var(--ease);
+  display: flex; align-items: center; justify-content: center; gap: 0.4rem;
+}
+.user-greeting.greeting--visible { transform: translateY(0); }
+.greeting__wave { animation: greetingWave 2s ease-in-out infinite; display: inline-block; }
+@keyframes greetingWave {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(15deg); }
+  75% { transform: rotate(-10deg); }
+}
+.greeting__name { font-weight: 600; }
+body.greeting-visible .nav { top: 0; }
+@media (max-width: 560px) {
+  .user-greeting { font-size: 0.75rem; padding: 0.4rem 1rem; }
+}
+
+/* ============================================================
+   NEW: Mobile menu search field
+   ============================================================ */
+.mobile-menu__search {
+  padding: 0.75rem 0 1rem; border-bottom: 1px solid var(--border);
+}
+.mobile-menu__search form {
+  display: flex; align-items: center; gap: 0.5rem;
+  border: 1px solid var(--border); border-radius: 999px; padding: 0.4rem 0.4rem 0.4rem 1rem;
+}
+.mobile-menu__search input {
+  flex: 1; border: none; outline: none; background: transparent;
+  font-family: var(--sans); font-size: 0.9rem; color: var(--black);
+}
+.mobile-menu__search input::placeholder { color: var(--grey-500); }
+.mobile-menu__search button {
+  border: none; background: transparent; color: var(--grey-700);
+  cursor: pointer; display: flex; padding: 0.2rem; flex-shrink: 0;
+}
+.mobile-menu__signin {
+  font-weight: 600; color: var(--black) !important;
+  border: 1px solid var(--black) !important; border-radius: 4px;
+  text-align: center; margin-top: 0.5rem; padding: 0.8rem !important;
+  text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.8rem;
+  transition: background 0.2s, color 0.2s;
+}
+.mobile-menu__signin:hover { background: var(--black); color: var(--white) !important; }
+
+/* ============================================================
+   NEW: Mobile nav improvements - search visible, compact layout
+   ============================================================ */
+@media (max-width: 900px) {
+  .nav .container { gap: 0.75rem; }
+  .nav__search { max-width: 200px; flex: 0 1 200px; }
+  .nav__links { display: none; }
+  .nav__toggle { display: flex; }
+}
+@media (max-width: 640px) {
+  .nav .container { padding: 0.75rem 1rem; gap: 0.5rem; }
+  .nav__search { display: none; }
+  .nav__brand { font-size: 1.15rem; }
+  .nav__cart-wrap { margin-left: auto; }
+}
+
+/* Cookie banner mobile: make sure buttons are never hidden */
+@media (max-width: 560px) {
+  .cookie-banner {
+    flex-direction: column; gap: 0.75rem; padding: 1rem;
+    text-align: center; max-height: none;
+  }
+  .cookie-banner__text { max-width: 100%; font-size: 0.78rem; }
+  .cookie-banner__btns { width: 100%; justify-content: center; }
+  .cookie-banner__btn { flex: 1; padding: 0.6rem 0.5rem; font-size: 0.78rem; }
+}
+
+/* Turnstile captcha mobile fix */
+.cf-turnstile { max-width: 100%; overflow: hidden; }
+.cf-turnstile iframe { max-width: 100% !important; }
+
+/* Newsletter form captcha on mobile */
+@media (max-width: 560px) {
+  .newsletter-form .cf-turnstile > div {
+    transform: scale(0.85); transform-origin: center;
+  }
+}
+
+/* ============================================================
+   NEW: Engagement features - hover lift, interactive elements
+   ============================================================ */
+/* Product card engagement: subtle glow on hover */
+.card {
+  position: relative;
+  transition: transform 0.25s var(--ease), box-shadow 0.35s ease;
+}
+.card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+}
+
+/* Hero CTA pulse to draw attention */
+.hero .btn {
+  position: relative;
+}
+.hero .btn::after {
+  content: ""; position: absolute; inset: -2px;
+  border: 1px solid var(--black); border-radius: 2px;
+  opacity: 0; animation: heroBtnPulse 2.5s ease-in-out infinite;
+}
+@keyframes heroBtnPulse {
+  0%, 100% { opacity: 0; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(1.04); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero .btn::after { animation: none; }
+}
+
+/* Toast improvements - slide in from bottom on mobile */
+@media (max-width: 560px) {
+  .toast {
+    animation: toastSlideUp 0.3s var(--ease);
+  }
+  @keyframes toastSlideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* Mobile buy bar: make it taller, easier to tap */
+@media (max-width: 720px) {
+  .mobile-buy-bar {
+    padding: 0.7rem 1rem;
+    padding-bottom: calc(0.7rem + env(safe-area-inset-bottom, 0px));
+  }
+  .mobile-buy-bar .btn {
+    padding: 0.85rem 1rem; font-size: 0.82rem; min-height: 44px;
+  }
+  .mobile-buy-bar__price { font-size: 1.15rem; }
+}
+
+/* Back to top: move up on mobile to avoid cookie banner overlap */
+@media (max-width: 560px) {
+  .back-to-top { bottom: 0.75rem; left: 0.75rem; width: 38px; height: 38px; }
+}
+
+/* Feature strip: stack nicely on very small screens */
+@media (max-width: 420px) {
+  .feature-strip { flex-direction: column; align-items: center; gap: 1rem; }
+}
+
+/* Auth modal: full height on mobile for better UX */
+@media (max-width: 560px) {
+  .auth-modal__panel {
+    margin: 0; max-width: 100%; width: 100%;
+    min-height: 100vh; border-radius: 0;
+    padding: 2rem 1.25rem; max-height: 100vh; overflow-y: auto;
+  }
+  .auth-modal__backdrop { background: rgba(10,10,10,0.7); }
+}
+
+/* Section padding tighter on mobile */
+@media (max-width: 560px) {
+  .section { padding: 3.5rem 0; }
+  .section--tight { padding: 2.5rem 0; }
+  .hero { padding: 5rem 0 4rem; }
+  .section-head { margin-bottom: 2.5rem; }
+}
+
+/* Grid: tighter gaps on mobile */
+@media (max-width: 560px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1.25rem; }
+}
+
+/* Product detail: stack with less gap on mobile */
+@media (max-width: 720px) {
+  .product-detail { gap: 1.5rem; }
+  .product-info h1 { font-size: 1.7rem; }
+  .product-price { font-size: 1.2rem; }
+}
+
+/* Cart: tighter on mobile */
+@media (max-width: 560px) {
+  .cart-item { gap: 0.75rem; }
+  .cart-item__image { width: 56px; height: 70px; }
+  .cart-summary { padding: 1.25rem; }
+}
+
+/* Admin: make tables scroll on mobile */
+@media (max-width: 760px) {
+  .admin-main { padding: 1rem; overflow-x: auto; }
+  .table { font-size: 0.8rem; }
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .stat-card { padding: 1rem; }
+  .stat-card .num { font-size: 1.5rem; }
+}
+
+/* ============================================================
+   NEW: Hero CTA group, engagement prompt, final polish
+   ============================================================ */
+.hero__cta-group {
+  display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;
+  margin-bottom: 0;
+}
+.hero__cta-secondary {
+  animation: heroFadeUp 1s var(--ease) forwards;
+  animation-delay: 0.65s;
+  opacity: 0;
+}
+@media (max-width: 560px) {
+  .hero__cta-group { flex-direction: column; gap: 0.6rem; }
+  .hero__cta-group .btn { width: 100%; }
+}
+
+/* Engagement signup prompt - slides in from bottom */
+.signup-prompt {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 90;
+  background: var(--black); color: var(--white);
+  padding: 1.25rem 1.5rem; display: flex; align-items: center;
+  justify-content: center; gap: 1.25rem; flex-wrap: wrap;
+  transform: translateY(100%); transition: transform 0.5s var(--ease);
+  box-shadow: 0 -8px 32px rgba(0,0,0,0.2);
+}
+.signup-prompt.show { transform: translateY(0); }
+.signup-prompt__text { font-size: 0.88rem; color: var(--grey-300); max-width: 480px; }
+.signup-prompt__text strong { color: var(--white); }
+.signup-prompt__close {
+  background: none; border: none; color: var(--grey-500); cursor: pointer;
+  font-size: 1.2rem; padding: 0.25rem; position: absolute; top: 0.5rem; right: 0.75rem;
+}
+.signup-prompt__close:hover { color: var(--white); }
+@media (max-width: 560px) {
+  .signup-prompt { flex-direction: column; gap: 0.75rem; padding: 1rem; text-align: center; }
+  .signup-prompt__text { font-size: 0.82rem; }
+  .signup-prompt .btn { width: 100%; }
+}
+
+/* Newsletter section engagement */
+.newsletter-section {
+  position: relative; overflow: hidden;
+}
+.newsletter-section::before {
+  content: ""; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at center, rgba(255,255,255,0.03) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* Scroll-reveal stagger improvement */
+.reveal { will-change: opacity, transform; }
+
+/* Smooth font rendering on mobile */
+@media (max-width: 560px) {
+  body { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  h1 { font-size: clamp(1.8rem, 7vw, 2.4rem); }
+  h2 { font-size: clamp(1.5rem, 5vw, 2rem); }
+}
+
+/* Touch target sizes - minimum 44px for buttons on mobile */
+@media (max-width: 560px) {
+  .btn { min-height: 44px; padding: 0.75rem 1.25rem; }
+  .filter-tab { min-height: 40px; display: inline-flex; align-items: center; }
+  .card__add-btn { min-height: 40px; }
+  .nav__toggle { width: 40px; height: 40px; }
+  .back-to-top { width: 40px; height: 40px; }
+}
+
+/* Prevent layout shift from images */
+.card__image { min-height: 200px; }
+.product-gallery__main { min-height: 300px; }
+
+/* Focus visible improvements for keyboard nav */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--black); outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* Auth modal close button - bigger touch target */
+.auth-modal__close {
+  min-width: 44px; min-height: 44px; display: flex;
+  align-items: center; justify-content: center;
+}
+
+/* ============================================================
+   NEW: Mobile bottom navigation - native app feel
+   ============================================================ */
+.bottom-nav {
+  display: none;
+}
+@media (max-width: 720px) {
+  .bottom-nav {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0;
+    z-index: 80; background: rgba(255,255,255,0.98);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border);
+    padding: 0.35rem 0;
+    padding-bottom: calc(0.35rem + env(safe-area-inset-bottom, 0px));
+    justify-content: space-around; align-items: stretch;
+    box-shadow: 0 -2px 20px rgba(0,0,0,0.06);
+  }
+  .bottom-nav__item {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    gap: 0.15rem; padding: 0.35rem 0.25rem;
+    color: var(--grey-500); text-decoration: none;
+    font-size: 0.65rem; font-family: var(--sans); font-weight: 500;
+    transition: color 0.2s var(--ease); position: relative;
+    min-height: 50px; justify-content: center;
+  }
+  .bottom-nav__item svg { transition: transform 0.25s var(--ease); }
+  .bottom-nav__item--active { color: var(--black); }
+  .bottom-nav__item--active svg { transform: scale(1.1); }
+  .bottom-nav__item:active svg { transform: scale(0.9); }
+  .bottom-nav__item--active::before {
+    content: ""; position: absolute; top: -0.35rem; left: 50%;
+    transform: translateX(-50%); width: 24px; height: 2px;
+    background: var(--black); border-radius: 0 0 2px 2px;
+  }
+  .bottom-nav__cart-icon { position: relative; }
+  .bottom-nav__badge {
+    position: absolute; top: -6px; right: -8px;
+    background: var(--black); color: var(--white);
+    font-size: 0.6rem; min-width: 16px; height: 16px;
+    border-radius: 999px; display: flex; align-items: center;
+    justify-content: center; padding: 0 4px; font-weight: 600;
+    animation: badgePop 0.3s var(--ease);
+  }
+  @keyframes badgePop {
+    from { transform: scale(0); }
+    to { transform: scale(1); }
+  }
+
+  /* Offset content for bottom nav */
+  main { padding-bottom: 70px; }
+  .footer { padding-bottom: 70px; }
+  .back-to-top { bottom: 80px; }
+  .signup-prompt { bottom: 70px; }
+  .mobile-buy-bar { bottom: 60px; }
+}
+
+/* Admin bottom nav for mobile */
+@media (max-width: 760px) {
+  .admin-bottom-nav {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0;
+    z-index: 80; background: var(--black);
+    padding: 0.35rem 0;
+    padding-bottom: calc(0.35rem + env(safe-area-inset-bottom, 0px));
+    justify-content: space-around; align-items: stretch;
+    box-shadow: 0 -2px 20px rgba(0,0,0,0.15);
+  }
+  .admin-bottom-nav__item {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    gap: 0.15rem; padding: 0.35rem 0.25rem;
+    color: var(--grey-500); text-decoration: none;
+    font-size: 0.6rem; font-family: var(--sans); font-weight: 500;
+    transition: color 0.2s; min-height: 50px; justify-content: center;
+  }
+  .admin-bottom-nav__item--active { color: var(--white); }
+  .admin-main { padding-bottom: 70px; }
+}
+.admin-bottom-nav { display: none; }
+
+/* ============================================================
+   NEW: Admin panel improvements for non-techy users
+   ============================================================ */
+.admin-nav a { display: flex; align-items: center; gap: 0.6rem; }
+.admin-nav a svg { flex-shrink: 0; opacity: 0.6; }
+.admin-nav a.active svg { opacity: 1; }
+.admin-nav__badge {
+  background: var(--black); color: var(--white); font-size: 0.65rem;
+  padding: 0.1rem 0.4rem; border-radius: 999px; margin-left: auto;
+  font-weight: 600;
+}
+
+.admin-action-banner {
+  display: flex; align-items: center; gap: 1rem;
+  background: var(--black); color: var(--white);
+  padding: 1.25rem 1.5rem; border-radius: 8px;
+  margin-bottom: 1.5rem; flex-wrap: wrap;
+}
+.admin-action-banner--good {
+  background: #234d23;
+}
+.admin-action-banner__icon {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: rgba(255,255,255,0.15); display: flex;
+  align-items: center; justify-content: center; flex-shrink: 0;
+}
+.admin-action-banner__content { flex: 1; min-width: 200px; }
+.admin-action-banner__content h3 { margin: 0 0 0.25rem; color: var(--white); font-family: var(--sans); }
+.admin-action-banner__content p { margin: 0; color: var(--grey-300); font-size: 0.85rem; }
+.admin-action-banner .btn--invert {
+  background: var(--white); color: var(--black); border-color: var(--white);
+}
+@media (max-width: 560px) {
+  .admin-action-banner { flex-direction: column; text-align: center; }
+  .admin-action-banner .btn { width: 100%; }
+}
+
+.stat-card--hero {
+  grid-column: span 2;
+  background: var(--black); color: var(--white);
+}
+.stat-card--hero .num { color: var(--white); font-size: 2.5rem; }
+.stat-card--hero .label { color: var(--grey-300); }
+@media (max-width: 560px) {
+  .stat-card--hero { grid-column: span 2; }
+}
+
+.admin-order-cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.75rem;
+}
+.admin-order-card {
+  display: block; padding: 1rem 1.25rem; border: 1px solid var(--border);
+  border-radius: 6px; text-decoration: none; color: var(--black);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.admin-order-card:hover {
+  border-color: var(--black); box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+.admin-order-card__top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.admin-order-card__ref { font-size: 0.75rem; color: var(--grey-500); font-weight: 500; }
+.admin-order-card__product { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.5rem; }
+.admin-order-card__bottom { display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; color: var(--grey-700); }
+.admin-order-card__amount { font-weight: 600; color: var(--black); }
+
+.admin-quick-actions { margin-top: 2.5rem; }
+.admin-quick-actions__grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+.admin-quick-action {
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+  padding: 1.25rem 1rem; border: 1px solid var(--border); border-radius: 6px;
+  text-decoration: none; color: var(--black); font-size: 0.82rem; font-weight: 500;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.admin-quick-action:hover { border-color: var(--black); transform: translateY(-2px); }
+.admin-quick-action svg { color: var(--grey-700); }
+
+/* Toggle switch labels */
+.toggle-label {
+  display: flex; align-items: center; justify-content: space-between;
+  cursor: pointer; font-weight: 500; gap: 1rem;
+}
+.toggle-label input[type="checkbox"] {
+  width: 40px; height: 22px; appearance: none; -webkit-appearance: none;
+  background: var(--grey-200); border-radius: 999px; position: relative;
+  cursor: pointer; transition: background 0.2s; flex-shrink: 0;
+}
+.toggle-label input[type="checkbox"]::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 18px; height: 18px; background: var(--white); border-radius: 50%;
+  transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.toggle-label input[type="checkbox"]:checked { background: var(--black); }
+.toggle-label input[type="checkbox"]:checked::after { transform: translateX(18px); }
+
+/* Admin sidebar on mobile: collapsible */
+@media (max-width: 760px) {
+  .admin-sidebar {
+    position: fixed; top: 0; left: 0; right: 0; height: auto;
+    width: 100%; z-index: 60; padding: 0.75rem 1rem;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border); background: var(--white);
+  }
+  .admin-sidebar__brand { font-size: 1rem; }
+  .admin-nav { display: none; }
+  .admin-main { margin-top: 50px; padding: 1rem; }
+}
+
+/* Admin table improvements on mobile */
+@media (max-width: 760px) {
+  .table { width: 100%; overflow-x: auto; display: block; }
+  .admin-topbar { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
 }

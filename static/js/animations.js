@@ -425,6 +425,26 @@ wrap.addEventListener("mouseenter", function () {
 wrap.addEventListener("mouseleave", function () {
   hideTimer = setTimeout(function () { preview.classList.remove("open"); }, 200);
 });
+// Mobile: tap the cart icon to toggle preview
+var cartLink = wrap.querySelector(".nav__cart");
+if (cartLink) {
+  cartLink.addEventListener("click", function (e) {
+    if (window.matchMedia("(hover: none), (pointer: coarse)").matches) {
+      e.preventDefault();
+      if (preview.classList.contains("open")) {
+        preview.classList.remove("open");
+      } else {
+        if (!loaded) loadCart();
+        preview.classList.add("open");
+        setTimeout(function() {
+          if (preview.classList.contains("open")) {
+            preview.classList.remove("open");
+          }
+        }, 5000);
+      }
+    }
+  });
+}
 // Re-load cart after add-to-cart
 document.addEventListener("submit", function (e) {
   if (e.target && e.target.classList && e.target.classList.contains("add-to-cart-form")) {

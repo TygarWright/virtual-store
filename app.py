@@ -14,6 +14,7 @@ from helpers import (
     save_product_image, delete_file_quietly, send_email, email_enabled,
     rate_limited, turnstile_enabled, verify_turnstile,
     firebase_auth_enabled, verify_firebase_id_token,
+    generate_otp_code, store_otp, verify_otp_code,
 )
 import razorpay_client as rzp
 
@@ -71,9 +72,17 @@ def set_security_headers(response):
 def inject_globals():
     cart = session.get("cart", {})
     cart_count = sum(cart.values()) if cart else 0
+    pending_count = 0
+    try:
+        conn = db.get_db()
+        pending_count = conn.execute("SELECT COUNT(*) c FROM orders WHERE status = 'paid'").fetchone()["c"]
+        conn.close()
+    except Exception:
+        pass
     return {
         "csrf_token": get_csrf_token,
         "cart_count": cart_count,
+        "pending_count": pending_count,
         "turnstile_enabled": turnstile_enabled(),
         "turnstile_site_key": config.TURNSTILE_SITE_KEY,
         "firebase_auth_enabled": firebase_auth_enabled(),
@@ -88,6 +97,9 @@ def inject_globals():
         "current_customer_name": session.get("customer_name", ""),
         "current_customer_phone": session.get("customer_phone", ""),
         "current_customer_email": session.get("customer_email", ""),
+        "customer_logged_in": bool(session.get("customer_id")),
+        "otp_dev_mode": config.OTP_DEV_MODE,
+        "settings": get_settings(),
     }
 
 
@@ -823,6 +835,95 @@ def track_order():
 
 # ============================================================= CUSTOMER AUTH (Firebase phone/OTP)
 
+# ============================================================= CUSTOMER AUTH (self-contained OTP)
+
+@app.route("/auth/send-otp", methods=["POST"])
+def auth_send_otp():
+    """Generate a 6-digit OTP, store it in the database with an expiry, and
+    return it to the client in dev mode (so the flow works without an SMS
+    provider). In production with a real SMS gateway, the code would be sent
+    via SMS and not returned in the response."""
+    check_csrf_api()
+    if rate_limited("send-otp", max_attempts=5, window_seconds=60):
+        return jsonify({"error": "Too many attempts. Please wait a minute and try again."}), 429
+
+    data = request.get_json(force=True, silent=True) or {}
+    phone = (data.get("phone") or "").strip()
+
+    if not phone or not phone.startswith("+"):
+        return jsonify({"error": "Please enter your phone number with the country code, e.g. +919876543210."}), 400
+    if len(phone) < 8 or len(phone) > 16:
+        return jsonify({"error": "That phone number doesn't look right. Please check and try again."}), 400
+
+    code = generate_otp_code()
+    conn = db.get_db()
+    store_otp(conn, phone, code)
+    conn.commit()
+    conn.close()
+
+    response = {"success": True, "message": "Code sent!"}
+    if config.OTP_DEV_MODE:
+        response["dev_code"] = code
+    return jsonify(response)
+
+
+@app.route("/auth/verify-otp", methods=["POST"])
+def auth_verify_otp():
+    """Verify the OTP code. If valid, create or update the customer account
+    and log them into a Flask session. If name/email are provided, they're
+    saved with the account (new users must provide a name at least)."""
+    check_csrf_api()
+    if rate_limited("verify-otp", max_attempts=10, window_seconds=60):
+        return jsonify({"error": "Too many attempts. Please wait a minute and try again."}), 429
+
+    data = request.get_json(force=True, silent=True) or {}
+    phone = (data.get("phone") or "").strip()
+    code = (data.get("code") or "").strip()
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+
+    if not phone or not code:
+        return jsonify({"error": "Please enter the code we sent you."}), 400
+
+    conn = db.get_db()
+    valid, stored_name, stored_email = verify_otp_code(conn, phone, code)
+    if not valid:
+        conn.close()
+        return jsonify({"error": "That code is wrong or expired. Please try again."}), 400
+
+    # Use provided name/email, or fall back to what was stored with the OTP
+    final_name = name or stored_name or ""
+    final_email = email or stored_email or ""
+
+    # Look up or create the customer by phone number
+    customer = conn.execute("SELECT * FROM customers WHERE phone = ?", (phone,)).fetchone()
+    if customer:
+        new_name = final_name or customer["name"]
+        new_email = final_email or customer["email"]
+        conn.execute(
+            "UPDATE customers SET name = ?, email = ?, last_login_at = ? WHERE id = ?",
+            (new_name, new_email, db.now(), customer["id"]),
+        )
+        customer_id = customer["id"]
+    else:
+        cur = conn.execute(
+            """INSERT INTO customers (phone, name, email, created_at, last_login_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (phone, final_name, final_email, db.now(), db.now()),
+        )
+        customer_id = cur.lastrowid
+        new_name, new_email = final_name, final_email
+
+    conn.commit()
+    conn.close()
+
+    session["customer_id"] = customer_id
+    session["customer_name"] = new_name
+    session["customer_phone"] = phone
+    session["customer_email"] = new_email
+    return jsonify({"success": True, "name": new_name, "phone": phone, "email": new_email})
+
+
 @app.route("/auth/phone/verify", methods=["POST"])
 def auth_phone_verify():
     """Called from the browser right after Firebase confirms the SMS code.
@@ -875,6 +976,30 @@ def auth_phone_verify():
     session["customer_phone"] = phone
     session["customer_email"] = new_email
     return jsonify({"success": True, "name": new_name, "phone": phone, "email": new_email})
+
+
+@app.route("/auth/update-profile", methods=["POST"])
+def auth_update_profile():
+    """Update the logged-in customer's name and email. Used after OTP
+    verification when a new user needs to provide their name."""
+    check_csrf_api()
+    if not session.get("customer_id"):
+        return jsonify({"error": "Please sign in first."}), 401
+    data = request.get_json(force=True, silent=True) or {}
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+    if not name:
+        return jsonify({"error": "Please enter your name."}), 400
+    conn = db.get_db()
+    conn.execute(
+        "UPDATE customers SET name = ?, email = ? WHERE id = ?",
+        (name, email, session["customer_id"]),
+    )
+    conn.commit()
+    conn.close()
+    session["customer_name"] = name
+    session["customer_email"] = email
+    return jsonify({"success": True, "name": name, "phone": session.get("customer_phone", ""), "email": email})
 
 
 @app.route("/auth/logout", methods=["POST"])
@@ -1044,8 +1169,12 @@ def admin_settings():
     if request.method == "POST":
         check_csrf()
         conn = db.get_db()
+        checkbox_keys = {"auto_deliver_enabled", "auto_email_enabled", "low_stock_alerts"}
         for key in db.DEFAULT_SETTINGS.keys():
-            value = request.form.get(key, "")
+            if key in checkbox_keys:
+                value = "true" if request.form.get(key) else "false"
+            else:
+                value = request.form.get(key, "")
             conn.execute(
                 "INSERT INTO settings (key, value) VALUES (?, ?) "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
