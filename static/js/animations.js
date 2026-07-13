@@ -177,6 +177,39 @@ window.getCsrfToken = function () {
     if (thumbEl) thumbEl.classList.add("active");
   };
 
+  // ---------- Product gallery touch swipe (mobile) ----------
+  var galleryMain = document.querySelector(".product-gallery__main");
+  var galleryThumbs = document.querySelectorAll(".product-gallery__thumbs img");
+  if (galleryMain && galleryThumbs.length > 1) {
+    var touchStartX = 0;
+    var touchEndX = 0;
+    galleryMain.addEventListener("touchstart", function (e) {
+      touchStartX = e.changedTouches[0].screenX;
+    }, { passive: true });
+    galleryMain.addEventListener("touchend", function (e) {
+      touchEndX = e.changedTouches[0].screenX;
+      var diff = touchEndX - touchStartX;
+      if (Math.abs(diff) < 40) return; // ignore tiny swipes
+      var currentIdx = Array.from(galleryThumbs).findIndex(function (t) {
+        return t.classList.contains("active");
+      });
+      if (currentIdx === -1) currentIdx = 0;
+      if (diff < 0) {
+        // swipe left -> next image
+        var nextIdx = Math.min(currentIdx + 1, galleryThumbs.length - 1);
+        if (nextIdx !== currentIdx) {
+          window.swapGalleryImage(galleryThumbs[nextIdx].src, galleryThumbs[nextIdx]);
+        }
+      } else {
+        // swipe right -> previous image
+        var prevIdx = Math.max(currentIdx - 1, 0);
+        if (prevIdx !== currentIdx) {
+          window.swapGalleryImage(galleryThumbs[prevIdx].src, galleryThumbs[prevIdx]);
+        }
+      }
+    }, { passive: true });
+  }
+
   // ---------- Subtle keystroke pulse ----------
   // A tiny, elegant flicker of the scroll-progress bar every time a key is
   // pressed — physical keyboard, phone keyboard, anything that fires

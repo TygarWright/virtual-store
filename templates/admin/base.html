@@ -12,6 +12,13 @@
 <div class="admin-shell">
   <aside class="admin-sidebar">
     <a href="{{ url_for('admin_dashboard') }}" class="admin-sidebar__brand">{{ settings.site_name }} Admin</a>
+    <form method="POST" action="{{ url_for('admin_logout') }}" class="admin-mobile-logout" style="margin:0;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="admin-nav__logout-btn" style="display:flex; align-items:center; gap:0.3rem; font-size:0.78rem; padding:0.4rem 0.6rem;" aria-label="Log out">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+        <span>Log Out</span>
+      </button>
+    </form>
     <nav class="admin-nav">
       <a href="{{ url_for('admin_dashboard') }}" class="{{ 'active' if request.endpoint == 'admin_dashboard' }}">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
@@ -90,6 +97,10 @@
   <a href="{{ url_for('admin_settings') }}" class="admin-bottom-nav__item {{ 'admin-bottom-nav__item--active' if request.endpoint == 'admin_settings' }}">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"></circle><path d="M12 1v6m0 6v6m11-7h-6m-6 0H1m17.5-6.5L14 7m-4 6l-4.5 4.5M21 16.5L16.5 12m-9 0L3 16.5M18.5 5.5L14 10"></path></svg>
     <span>Settings</span>
+  </a>
+  <a href="{{ url_for('admin_account') }}" class="admin-bottom-nav__item {{ 'admin-bottom-nav__item--active' if request.endpoint == 'admin_account' }}">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+    <span>Account</span>
   </a>
 </nav>
 </body>

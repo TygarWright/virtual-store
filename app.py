@@ -55,7 +55,7 @@ def set_security_headers(response):
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data:; "
-        "script-src 'self' https://challenges.cloudflare.com https://checkout.razorpay.com "
+        "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://checkout.razorpay.com "
         "https://www.gstatic.com https://www.google.com https://apis.google.com; "
         "frame-src https://challenges.cloudflare.com https://api.razorpay.com "
         "https://www.google.com https://*.firebaseapp.com; "

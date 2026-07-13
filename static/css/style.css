@@ -885,7 +885,7 @@ body.menu-open { overflow: hidden; }
 .mobile-buy-bar__price { font-family: var(--serif); font-size: 1.1rem; flex-shrink: 0; }
 .mobile-buy-bar .btn { flex: 1; padding: 0.75rem 1rem; font-size: 0.78rem; }
 @media (max-width: 720px) {
-  .mobile-buy-bar { display: flex; }
+  .mobile-buy-bar { display: flex; bottom: 60px; }
   .product-info { padding-bottom: 4.5rem; }
 }
 
@@ -1471,11 +1471,21 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
     width: 100%; z-index: 60; padding: 0.75rem 1rem;
     display: flex; align-items: center; justify-content: space-between;
     border-bottom: 1px solid var(--border); background: var(--white);
+    color: var(--black);
   }
-  .admin-sidebar__brand { font-size: 1rem; }
+  .admin-sidebar__brand { font-size: 1rem; color: var(--black); }
   .admin-nav { display: none; }
   .admin-main { margin-top: 50px; padding: 1rem; }
+  .admin-mobile-logout { display: block !important; }
+  .admin-mobile-logout .admin-nav__logout-btn {
+    color: var(--grey-700); border: 1px solid var(--border);
+    border-radius: 3px; background: transparent;
+  }
+  .admin-mobile-logout .admin-nav__logout-btn:hover {
+    background: var(--grey-50); color: var(--black);
+  }
 }
+.admin-mobile-logout { display: none; }
 
 /* Admin table improvements on mobile */
 @media (max-width: 760px) {
