@@ -33,6 +33,18 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
 db.init_db()
 
 
+@app.before_request
+def capture_url_coupon():
+    """Check for ?coupon=CODE in the URL on any GET request and store it in
+    the session so it can be auto-applied at checkout. This enables
+    URL-driven coupons from marketing campaigns, social media links, etc."""
+    if request.method == "GET" and request.args.get("coupon"):
+        code = request.args.get("coupon", "").strip().upper()
+        if code:
+            session["url_coupon_code"] = code
+            session.modified = True
+
+
 def is_safe_redirect_target(target):
     """Only allow redirecting to a same-site relative path — blocks
     open-redirect attacks via a crafted ?next= value."""
@@ -101,6 +113,131 @@ def inject_globals():
         "otp_dev_mode": config.OTP_DEV_MODE,
         "settings": get_settings(),
     }
+
+
+def _is_coupon_active(coupon, now_str=None):
+    """Check if a coupon is active, not expired, not started yet, and not
+    exhausted by usage limits. Returns True if the coupon is usable right now."""
+    if not coupon:
+        return False
+    if not coupon["active"]:
+        return False
+    if now_str is None:
+        now_str = datetime.now(timezone.utc).isoformat()
+    if coupon["starts_at"] and coupon["starts_at"] > now_str:
+        return False
+    if coupon["expires_at"] and coupon["expires_at"] < now_str:
+        return False
+    if coupon["usage_limit"] is not None and coupon["used_count"] >= coupon["usage_limit"]:
+        return False
+    return True
+
+
+def _coupon_discount(coupon, base_price):
+    """Calculate the discount amount for a coupon against a base price.
+    Returns a non-negative int that never exceeds base_price - 1 (so the
+    customer always pays at least ₹1)."""
+    if coupon["discount_type"] == "percent":
+        discount = int(round(base_price * coupon["discount_value"] / 100))
+    else:
+        discount = coupon["discount_value"]
+    discount = max(0, min(discount, base_price - 1 if base_price > 0 else 0))
+    return discount
+
+
+def get_auto_coupons(conn, items, subtotal, product_id=None):
+    """Return a list of auto-applicable coupons for the current cart/visitor.
+    Checks trigger conditions (cart threshold, product-specific, customer
+    segment, URL-driven) and skips expired/inactive coupons. If product_id
+    is given (single-product page), checks against that product instead of
+    the cart.
+
+    Returns a list of coupon Row objects, sorted by discount (best first).
+    """
+    now_str = datetime.now(timezone.utc).isoformat()
+    coupons = conn.execute("SELECT * FROM coupons WHERE active = 1").fetchall()
+    customer_id = session.get("customer_id")
+    is_logged_in = bool(customer_id)
+    is_new_user = False
+    if is_logged_in:
+        order_count = conn.execute(
+            "SELECT COUNT(*) c FROM orders WHERE customer_id = ? AND status IN ('paid','delivered')",
+            (customer_id,)
+        ).fetchone()["c"]
+        is_new_user = order_count == 0
+
+    # URL-driven coupon stored in session
+    url_coupon_code = session.get("url_coupon_code", "")
+    url_coupon = None
+    if url_coupon_code:
+        url_coupon = conn.execute(
+            "SELECT * FROM coupons WHERE code = ? AND active = 1", (url_coupon_code.upper(),)
+        ).fetchone()
+
+    results = []
+    cart_product_ids = set()
+    if items:
+        cart_product_ids = {it["product"]["id"] for it in items}
+
+    for c in coupons:
+        if not _is_coupon_active(c, now_str):
+            continue
+
+        trigger = c["trigger_type"]
+
+        if trigger == "manual":
+            # Manual coupons only apply if the user types the code — skip auto
+            # unless it's the URL-driven one matching this code
+            if url_coupon and url_coupon["id"] == c["id"]:
+                results.append(c)
+            continue
+
+        if trigger == "url_driven":
+            # URL-driven coupons only apply when the code was passed via URL
+            # and stored in session
+            if url_coupon and url_coupon["id"] == c["id"]:
+                results.append(c)
+            continue
+
+        if trigger == "cart_threshold":
+            if not items:
+                continue
+            min_val = c["min_cart_value"] or 0
+            if subtotal >= min_val:
+                results.append(c)
+            continue
+
+        if trigger == "product_specific":
+            target_pid = c["target_product_id"]
+            if not target_pid:
+                continue
+            if product_id is not None:
+                if product_id == target_pid:
+                    results.append(c)
+            elif target_pid in cart_product_ids:
+                results.append(c)
+            continue
+
+        if trigger == "customer_segment":
+            segment = c["customer_segment"] or "all"
+            if segment == "all":
+                results.append(c)
+            elif segment == "new_user" and is_new_user:
+                results.append(c)
+            elif segment == "logged_in" and is_logged_in:
+                results.append(c)
+            continue
+
+    # Sort by best discount (descending). For cart, use subtotal; for single
+    # product, use product price.
+    def discount_amount(c):
+        base = subtotal if items else (product_id and conn.execute(
+            "SELECT price FROM products WHERE id = ?", (product_id,)
+        ).fetchone()["price"] or 0)
+        return _coupon_discount(c, base)
+
+    results.sort(key=discount_amount, reverse=True)
+    return results
 
 
 def get_cart_items(conn):
@@ -413,6 +550,69 @@ def api_cart_preview():
     return jsonify({"items": result, "subtotal": subtotal, "count": sum(it["quantity"] for it in items)})
 
 
+@app.route("/api/auto-coupons")
+def api_auto_coupons():
+    """Return auto-applicable coupons for the current cart or a specific product.
+    Query params: product_id (optional) — if given, checks against that product
+    instead of the cart. Returns the best matching coupon(s) with discount info."""
+    product_id = request.args.get("product_id", type=int)
+    conn = db.get_db()
+    if product_id:
+        items = None
+        subtotal = 0
+    else:
+        items, subtotal = get_cart_items(conn)
+
+    auto_coupons = get_auto_coupons(conn, items, subtotal, product_id=product_id)
+
+    results = []
+    for c in auto_coupons:
+        base = subtotal if items else 0
+        if product_id and not items:
+            p = conn.execute("SELECT price FROM products WHERE id = ?", (product_id,)).fetchone()
+            base = p["price"] if p else 0
+        discount = _coupon_discount(c, base)
+        final = base - discount if base > 0 else 0
+        results.append({
+            "id": c["id"],
+            "code": c["code"],
+            "discount_type": c["discount_type"],
+            "discount_value": c["discount_value"],
+            "trigger_type": c["trigger_type"],
+            "discount_amount": discount,
+            "final_price": final,
+            "auto_apply": bool(c["auto_apply"]),
+            "description": _coupon_description(c),
+        })
+    conn.close()
+    return jsonify({"coupons": results, "best": results[0] if results else None})
+
+
+def _coupon_description(c):
+    """Human-readable description of what a coupon does and how it triggers."""
+    parts = []
+    if c["discount_type"] == "percent":
+        parts.append(f"{c['discount_value']}% off")
+    else:
+        parts.append(f"₹{c['discount_value']} off")
+
+    trigger = c["trigger_type"]
+    if trigger == "cart_threshold":
+        parts.append(f"on orders over ₹{c['min_cart_value'] or 0}")
+    elif trigger == "product_specific":
+        parts.append("on this product")
+    elif trigger == "customer_segment":
+        seg = c["customer_segment"]
+        if seg == "new_user":
+            parts.append("for new customers")
+        elif seg == "logged_in":
+            parts.append("for signed-in customers")
+    elif trigger == "url_driven":
+        parts.append("from your referral link")
+
+    return " ".join(parts)
+
+
 @app.route("/cart")
 def view_cart():
     conn = db.get_db()
@@ -515,8 +715,8 @@ def api_cart_apply_coupon():
     conn.close()
     if not items:
         return jsonify({"error": "Your cart is empty."}), 400
-    if not coupon:
-        return jsonify({"error": "That coupon code isn't valid."}), 400
+    if not coupon or not _is_coupon_active(coupon):
+        return jsonify({"error": "That coupon code isn't valid or has expired."}), 400
     if coupon["usage_limit"] is not None and coupon["used_count"] >= coupon["usage_limit"]:
         return jsonify({"error": "That coupon has already been fully redeemed."}), 400
 
@@ -633,8 +833,8 @@ def api_apply_coupon():
         return jsonify({"error": "Product not found."}), 404
     coupon = conn.execute("SELECT * FROM coupons WHERE code = ? AND active = 1", (code,)).fetchone()
     conn.close()
-    if not coupon:
-        return jsonify({"error": "That coupon code isn't valid."}), 400
+    if not coupon or not _is_coupon_active(coupon):
+        return jsonify({"error": "That coupon code isn't valid or has expired."}), 400
     if coupon["usage_limit"] is not None and coupon["used_count"] >= coupon["usage_limit"]:
         return jsonify({"error": "That coupon has already been fully redeemed."}), 400
 
@@ -1604,8 +1804,10 @@ def admin_order_cancel(order_id):
 def admin_coupons():
     conn = db.get_db()
     coupons = conn.execute("SELECT * FROM coupons ORDER BY id DESC").fetchall()
+    products = conn.execute("SELECT id, name FROM products ORDER BY name ASC").fetchall()
     conn.close()
-    return render_template("admin/coupons.html", coupons=coupons)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    return render_template("admin/coupons.html", coupons=coupons, products=products, now_iso=now_iso)
 
 
 @app.route("/admin/coupons/save", methods=["POST"])
@@ -1617,6 +1819,32 @@ def admin_coupons_save():
     discount_value_raw = request.form.get("discount_value", "0").strip()
     usage_limit_raw = request.form.get("usage_limit", "").strip()
     active = 1 if request.form.get("active") else 0
+
+    # Automatic coupon fields
+    auto_apply = 1 if request.form.get("auto_apply") else 0
+    trigger_type = request.form.get("trigger_type", "manual")
+    if trigger_type not in ("manual", "cart_threshold", "product_specific", "customer_segment", "url_driven"):
+        trigger_type = "manual"
+    min_cart_value_raw = request.form.get("min_cart_value", "").strip()
+    target_product_id_raw = request.form.get("target_product_id", "").strip()
+    customer_segment = request.form.get("customer_segment", "all")
+    if customer_segment not in ("all", "new_user", "logged_in"):
+        customer_segment = "all"
+    starts_at = request.form.get("starts_at", "").strip() or None
+    expires_at = request.form.get("expires_at", "").strip() or None
+    # Convert datetime-local inputs to ISO format for storage
+    if starts_at:
+        try:
+            dt = datetime.fromisoformat(starts_at)
+            starts_at = dt.isoformat()
+        except ValueError:
+            starts_at = None
+    if expires_at:
+        try:
+            dt = datetime.fromisoformat(expires_at)
+            expires_at = dt.isoformat()
+        except ValueError:
+            expires_at = None
 
     if not code:
         flash("Please enter a coupon code.", "error")
@@ -1632,13 +1860,24 @@ def admin_coupons_save():
         return redirect(url_for("admin_coupons"))
 
     usage_limit = int(usage_limit_raw) if usage_limit_raw.isdigit() else None
+    min_cart_value = int(min_cart_value_raw) if min_cart_value_raw.isdigit() else None
+    target_product_id = int(target_product_id_raw) if target_product_id_raw.isdigit() else None
+
+    # If auto_apply is checked, set trigger_type appropriately
+    if auto_apply and trigger_type == "manual":
+        trigger_type = "cart_threshold"  # sensible default
 
     conn = db.get_db()
     try:
         conn.execute(
-            """INSERT INTO coupons (code, discount_type, discount_value, active, usage_limit, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (code, discount_type, discount_value, active, usage_limit, db.now()),
+            """INSERT INTO coupons
+               (code, discount_type, discount_value, active, usage_limit, created_at,
+                auto_apply, trigger_type, min_cart_value, target_product_id,
+                customer_segment, starts_at, expires_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (code, discount_type, discount_value, active, usage_limit, db.now(),
+             auto_apply, trigger_type, min_cart_value, target_product_id,
+             customer_segment, starts_at, expires_at),
         )
         conn.commit()
         flash(f"Coupon {code} created.", "success")

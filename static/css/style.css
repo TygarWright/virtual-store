@@ -447,6 +447,7 @@ p { margin: 0 0 1em; color: var(--grey-700); }
 .badge--paid { background: #fff4d9; color: #8a5b00; }
 .badge--delivered { background: #eef6ee; color: #234d23; }
 .badge--cancelled, .badge--failed { background: #fbeaea; color: #7a2222; }
+.badge--pending { background: #fef6e7; color: #7a5a10; }
 
 .card-box { border: 1px solid var(--border); border-radius: 3px; padding: 1.75rem; margin-bottom: 1.5rem; background: var(--white); }
 .card-box h3 { font-size: 1.05rem; margin-bottom: 1rem; }
@@ -1491,4 +1492,52 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 @media (max-width: 760px) {
   .table { width: 100%; overflow-x: auto; display: block; }
   .admin-topbar { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+}
+
+/* ---- Auto-coupon UI ---- */
+.auto-coupon-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: linear-gradient(135deg, #eef6ee, #f0f7ee);
+  border: 1px solid #c5e0c5;
+  border-radius: 12px;
+  margin-top: 0.75rem;
+}
+
+.auto-coupon-badge {
+  flex-shrink: 0;
+  background: #2d7d2d;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.auto-coupon-info {
+  flex: 1;
+  font-size: 0.85rem;
+  color: #234d23;
+  line-height: 1.4;
+}
+
+.auto-coupon-remove {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid #c5e0c5;
+  color: #4a7a4a;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.auto-coupon-remove:hover {
+  background: #fbeaea;
+  border-color: #e0c5c5;
+  color: #7a2222;
 }

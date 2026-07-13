@@ -60,6 +60,8 @@
           <p id="cartCouponMessage" style="margin-top:0.5rem; font-size:0.82rem; display:none;"></p>
         </div>
 
+        <div class="auto-coupon-banner" id="autoCouponBanner" style="display:none;"></div>
+
         <div class="divider"></div>
 
         {% if not customer_logged_in %}
@@ -108,4 +110,5 @@
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script>const RAZORPAY_KEY = "{{ razorpay_key }}";</script>
 <script src="{{ url_for('static', filename='js/cart_checkout.js') }}"></script>
+<script src="{{ url_for('static', filename='js/auto_coupons.js') }}"></script>
 {% endblock %}

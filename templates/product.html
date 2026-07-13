@@ -106,6 +106,7 @@
           </div>
           <p id="couponMessage" style="margin-top:0.5rem; font-size:0.82rem; display:none;"></p>
         </div>
+        <div class="auto-coupon-banner" id="autoCouponBox" style="display:none; margin-bottom:1rem;"></div>
         <button class="btn btn--full" id="buyBtn" data-base-price="{{ product.price }}" data-currency="{{ settings.currency_symbol }}"
                 onclick="startCheckout({{ product.id }}, '{{ product.name|e }}')">
           Buy Now — {{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}
@@ -173,6 +174,7 @@
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script>const RAZORPAY_KEY = "{{ razorpay_key }}";</script>
 <script src="{{ url_for('static', filename='js/checkout.js') }}"></script>
+<script src="{{ url_for('static', filename='js/auto_coupons.js') }}"></script>
 <script>
 // Track recently viewed products in localStorage
 (function() {

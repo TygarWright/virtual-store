@@ -80,7 +80,15 @@ CREATE TABLE IF NOT EXISTS coupons (
     active         INTEGER NOT NULL DEFAULT 1,
     usage_limit    INTEGER,                            -- NULL = unlimited
     used_count     INTEGER NOT NULL DEFAULT 0,
-    created_at     TEXT NOT NULL
+    created_at     TEXT NOT NULL,
+    -- Automatic coupon system
+    auto_apply        INTEGER NOT NULL DEFAULT 0,      -- 0 = manual, 1 = auto-applies
+    trigger_type      TEXT NOT NULL DEFAULT 'manual',  -- manual, cart_threshold, product_specific, customer_segment, url_driven
+    min_cart_value    INTEGER,                         -- for cart_threshold trigger
+    target_product_id INTEGER REFERENCES products(id), -- for product_specific trigger
+    customer_segment  TEXT NOT NULL DEFAULT 'all',     -- all, new_user, logged_in
+    starts_at         TEXT,                            -- ISO datetime, coupon active from
+    expires_at        TEXT                             -- ISO datetime, coupon auto-expires at
 );
 
 CREATE TABLE IF NOT EXISTS testimonials (
@@ -157,6 +165,18 @@ MIGRATIONS = [
     # SQLite doesn't support ALTER COLUMN, so this is handled gracefully —
     # the schema change only applies to fresh databases, existing ones still
     # work because the new OTP auth flow uses phone as the unique key.
+    # ---- Automatic coupon system ----
+    # auto_apply: 0 = manual code entry, 1 = applies automatically when conditions match
+    "ALTER TABLE coupons ADD COLUMN auto_apply INTEGER NOT NULL DEFAULT 0",
+    # trigger_type: 'manual' (user types code), 'cart_threshold' (min spend),
+    # 'product_specific' (target product in cart), 'customer_segment' (new/logged-in user),
+    # 'url_driven' (URL param ?coupon=CODE stores it in session)
+    "ALTER TABLE coupons ADD COLUMN trigger_type TEXT NOT NULL DEFAULT 'manual'",
+    "ALTER TABLE coupons ADD COLUMN min_cart_value INTEGER",
+    "ALTER TABLE coupons ADD COLUMN target_product_id INTEGER REFERENCES products(id)",
+    "ALTER TABLE coupons ADD COLUMN customer_segment TEXT NOT NULL DEFAULT 'all'",
+    "ALTER TABLE coupons ADD COLUMN starts_at TEXT",
+    "ALTER TABLE coupons ADD COLUMN expires_at TEXT",
 ]
 
 DEFAULT_SETTINGS = {
