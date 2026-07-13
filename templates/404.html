@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}404 — Page Not Found{% endblock %}
+{% block content %}
+<section class="error-404">
+  <div class="container">
+    <div class="error-404__big" aria-hidden="true">404</div>
+    <span class="eyebrow">Lost</span>
+    <h1>This page wandered off</h1>
+    <p>The page you're looking for doesn't exist or may have been moved. Let's get you back on track.</p>
+    <a class="btn" href="{{ url_for('home') }}">Back to Home</a>
+  </div>
+</section>
+{% endblock %}

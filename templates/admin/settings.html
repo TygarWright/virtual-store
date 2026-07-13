@@ -1,0 +1,103 @@
+{% extends "admin/base.html" %}
+{% block title %}Site Settings{% endblock %}
+{% block content %}
+<div class="admin-topbar"><h1>Site Settings</h1></div>
+<p class="help-text">Everything here shows up on your live website immediately after you save.</p>
+
+<form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="card-box">
+    <h3>Basics</h3>
+    <div class="field">
+      <label>Site Name</label>
+      <input type="text" name="site_name" value="{{ settings.site_name }}" required>
+      <small>Shows in the top-left corner and page titles.</small>
+    </div>
+    <div class="field">
+      <label>Tagline</label>
+      <input type="text" name="site_tagline" value="{{ settings.site_tagline }}">
+      <small>A short line shown just above your homepage headline.</small>
+    </div>
+    <div class="field">
+      <label>Search Engine Description</label>
+      <textarea name="meta_description">{{ settings.meta_description }}</textarea>
+      <small>Shown by Google in search results. Keep it to 1–2 sentences.</small>
+    </div>
+  </div>
+
+  <div class="card-box">
+    <h3>Homepage Headline</h3>
+    <div class="field">
+      <label>Big Headline</label>
+      <textarea name="hero_title">{{ settings.hero_title }}</textarea>
+      <small>The large heading customers see first. Press Enter for a line break.</small>
+    </div>
+    <div class="field">
+      <label>Subheading</label>
+      <textarea name="hero_subtitle">{{ settings.hero_subtitle }}</textarea>
+    </div>
+  </div>
+
+  <div class="card-box">
+    <h3>About Us</h3>
+    <div class="field">
+      <label>Section Title</label>
+      <input type="text" name="about_title" value="{{ settings.about_title }}">
+    </div>
+    <div class="field">
+      <label>About Us Text</label>
+      <textarea name="about_content" style="min-height:180px;">{{ settings.about_content }}</textarea>
+      <small>Tell your story. Leave a blank line between paragraphs.</small>
+    </div>
+  </div>
+
+  <div class="card-box">
+    <h3>Automations</h3>
+    <p class="help-text" style="margin-top:0; margin-bottom:1.25rem;">Let the system handle things for you. Turn these on and forget about them.</p>
+    <div class="field">
+      <label class="toggle-label">
+        <span>Auto-deliver digital products</span>
+        <input type="checkbox" name="auto_deliver_enabled" {{ 'checked' if settings.auto_deliver_enabled == 'true' }}>
+      </label>
+      <small>When a customer pays for a product set to "Automatic" delivery, the system delivers it instantly — no action needed from you. They get the download link/code right away.</small>
+    </div>
+    <div class="field">
+      <label class="toggle-label">
+        <span>Email customers automatically</span>
+        <input type="checkbox" name="auto_email_enabled" {{ 'checked' if settings.auto_email_enabled != 'false' }}>
+      </label>
+      <small>Send order confirmation and delivery emails to customers automatically. You'll still see everything in the admin panel.</small>
+    </div>
+    <div class="field">
+      <label class="toggle-label">
+        <span>Show "low stock" warnings</span>
+        <input type="checkbox" name="low_stock_alerts" {{ 'checked' if settings.low_stock_alerts != 'false' }}>
+      </label>
+      <small>Get a visual alert on the dashboard when a product is running low.</small>
+    </div>
+  </div>
+
+  <div class="card-box">
+    <h3>Contact & Footer</h3>
+    <div class="field">
+      <label>Contact Email</label>
+      <input type="email" name="contact_email" value="{{ settings.contact_email }}">
+    </div>
+    <div class="field">
+      <label>Contact Phone</label>
+      <input type="text" name="contact_phone" value="{{ settings.contact_phone }}">
+    </div>
+    <div class="field">
+      <label>Footer Note</label>
+      <input type="text" name="footer_text" value="{{ settings.footer_text }}">
+    </div>
+    <div class="field">
+      <label>Currency Symbol</label>
+      <input type="text" name="currency_symbol" value="{{ settings.currency_symbol }}" style="max-width:80px;">
+    </div>
+  </div>
+
+  <button class="btn" type="submit">Save Changes</button>
+</form>
+{% endblock %}

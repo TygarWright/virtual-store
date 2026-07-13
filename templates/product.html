@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name }} — {{ settings.site_name }}{% endblock %}
+{% block og_title %}{{ product.name }} — {{ settings.site_name }}{% endblock %}
+{% block og_image %}{% if images %}<meta property="og:image" content="{{ url_for('static', filename='uploads/' ~ images[0], _external=True) }}">{% endif %}{% endblock %}
+{% block head %}
+<meta name="description" content="{{ product.short_description or product.name }}">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  "name": {{ product.name|tojson }},
+  "description": {{ product.short_description|tojson }},
+  {% if images %}"image": [{{ url_for('static', filename='uploads/' ~ images[0], _external=True)|tojson }}],{% endif %}
+  "offers": {
+    "@type": "Offer",
+    "priceCurrency": "INR",
+    "price": {{ product.price|tojson }},
+    "availability": "https://schema.org/InStock",
+    "url": {{ request.url|tojson }}
+  }
+}
+</script>
+{% endblock %}
+{% block content %}
+<section class="section">
+  <div class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <a href="{{ url_for('home') }}">Home</a>
+      <span>/</span>
+      <a href="{{ url_for('home') }}#products">Shop</a>
+      {% if product.category %}<span>/</span><a href="{{ url_for('home', category=product.category) }}#products">{{ product.category }}</a>{% endif %}
+      <span>/</span>
+      <span aria-current="page">{{ product.name }}</span>
+    </nav>
+  </div>
+  <div class="container product-detail">
+    <div class="product-gallery reveal">
+      <div class="product-gallery__main">
+        {% if images %}
+          <img id="mainImage" src="{{ url_for('static', filename='uploads/' ~ images[0]) }}" alt="{{ product.name }}" width="600" height="750">
+        {% else %}
+          <div class="card__placeholder" style="height:100%;">{{ product.name[0]|upper }}</div>
+        {% endif %}
+      </div>
+      {% if images|length > 1 %}
+      <div class="product-gallery__thumbs">
+        {% for img in images %}
+          <img src="{{ url_for('static', filename='uploads/' ~ img) }}"
+               class="{{ 'active' if loop.first else '' }}"
+               loading="lazy" width="64" height="80"
+               alt="{{ product.name }} — view {{ loop.index }}"
+               tabindex="0" role="button"
+               onclick="swapGalleryImage(this.src, this)"
+               onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();swapGalleryImage(this.src,this);}">
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="product-info reveal" style="--i: 1;">
+      <span class="eyebrow">{{ product.category or settings.site_name }}</span>
+      {% if product.ribbon %}<span class="product-ribbon product-ribbon--{{ product.ribbon|lower }}">{{ product.ribbon }}</span>{% endif %}
+      <h1>{{ product.name }}</h1>
+      <div class="product-price">
+        {% if product.compare_price and product.compare_price > product.price %}
+          <span class="product-price__compare">{{ settings.currency_symbol }}{{ "{:,}".format(product.compare_price) }}</span>
+          <span id="priceOriginal" class="product-price__current">{{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}</span>
+          <span id="priceDiscounted" class="product-price__discounted" style="display:none;"></span>
+          <span class="product-price__save">Save {{ settings.currency_symbol }}{{ "{:,}".format(product.compare_price - product.price) }} ({{ ((product.compare_price - product.price) / product.compare_price * 100)|round(0)|int }}%)</span>
+        {% else %}
+          <span id="priceOriginal">{{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}</span>
+          <span id="priceDiscounted" style="display:none;"></span>
+        {% endif %}
+      </div>
+      <p>{{ product.short_description }}</p>
+      <div class="divider"></div>
+      <div class="product-description">{{ product.description }}</div>
+
+      <form class="add-to-cart-form" action="{{ url_for('cart_add') }}" method="POST" style="display:flex; gap:0.75rem; align-items:center; margin-bottom:1.25rem;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="product_id" value="{{ product.id }}">
+        <div class="qty-selector">
+          <button type="button" onclick="this.nextElementSibling.stepDown(); this.nextElementSibling.dispatchEvent(new Event('change'));" aria-label="Decrease quantity">−</button>
+          <input type="number" name="quantity" value="1" min="1" max="99" aria-label="Quantity">
+          <button type="button" onclick="this.previousElementSibling.stepUp(); this.previousElementSibling.dispatchEvent(new Event('change'));" aria-label="Increase quantity">+</button>
+        </div>
+        <button type="submit" class="btn btn--outline" style="flex:1;">Add to Cart</button>
+      </form>
+
+      <div id="buyForm">
+        {% if not customer_logged_in %}
+        <p class="auth-inline-hint">
+          <a href="#" onclick="openAuthModal(); return false;">Sign in with your phone</a> for instant checkout, or continue as a guest below.
+        </p>
+        {% endif %}
+        <div class="field">
+          <label>Full Name</label>
+          <input type="text" id="buyerName" placeholder="Your name" value="{{ current_customer_name }}">
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="buyerEmail" placeholder="you@example.com" value="{{ current_customer_email }}">
+          <small>Your product & order status will be tied to this email.</small>
+        </div>
+        <div class="field">
+          <label>Phone (optional)</label>
+          <input type="tel" id="buyerPhone" placeholder="For faster support" value="{{ current_customer_phone }}">
+        </div>
+        <div class="field">
+          <label>Coupon Code (optional)</label>
+          <div style="display:flex; gap:0.6rem;">
+            <input type="text" id="couponCode" placeholder="e.g. WELCOME10" style="text-transform:uppercase;">
+            <button type="button" class="btn btn--outline btn--sm" style="flex-shrink:0;" onclick="applyCoupon({{ product.id }})">Apply</button>
+          </div>
+          <p id="couponMessage" style="margin-top:0.5rem; font-size:0.82rem; display:none;"></p>
+        </div>
+        <div class="auto-coupon-banner" id="autoCouponBox" style="display:none; margin-bottom:1rem;"></div>
+        <button class="btn btn--full" id="buyBtn" data-base-price="{{ product.price }}" data-currency="{{ settings.currency_symbol }}"
+                onclick="startCheckout({{ product.id }}, '{{ product.name|e }}')">
+          Buy Now — {{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}
+        </button>
+        <p id="buyError" style="color:#7a2222; margin-top:0.75rem; display:none;"></p>
+        <p style="margin-top:1rem; font-size:0.8rem; color:var(--grey-500);">
+          Secure payment via Razorpay. After payment, your order is reviewed and delivered by our team —
+          you'll be able to track its status any time.
+        </p>
+      </div>
+
+      <div class="trust-strip">
+        <div class="trust-strip__item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="10" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          Secure Razorpay checkout
+        </div>
+        <div class="trust-strip__item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 6L9 17l-5-5"></path></svg>
+          Personally reviewed before delivery
+        </div>
+        <div class="trust-strip__item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
+          Track your order any time
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if related %}
+  <div class="container related-products reveal">
+    <h3>You May Also Like</h3>
+    <div class="grid">
+      {% for r in related %}
+      <div class="card">
+        <a class="card__link" href="{{ url_for('product_detail', slug=r.slug) }}">
+          <div class="card__image">
+            {% if r.ribbon %}<span class="card__ribbon card__ribbon--{{ r.ribbon|lower }}">{{ r.ribbon }}</span>{% endif %}
+            {% if related_images[r.id] %}
+              <img src="{{ url_for('static', filename='uploads/' ~ related_images[r.id]) }}" alt="{{ r.name }}" loading="lazy" width="400" height="500">
+            {% else %}
+              <div class="card__placeholder">{{ r.name[0]|upper }}</div>
+            {% endif %}
+          </div>
+          {% if r.category %}<div class="card__category">{{ r.category }}</div>{% endif %}
+          <div class="card__title">{{ r.name }}</div>
+          <div class="card__price">
+            {% if r.compare_price and r.compare_price > r.price %}
+              <span class="card__price-old">{{ settings.currency_symbol }}{{ "{:,}".format(r.compare_price) }}</span>
+              <span class="card__price-new">{{ settings.currency_symbol }}{{ "{:,}".format(r.price) }}</span>
+              <span class="card__price-save">Save {{ settings.currency_symbol }}{{ "{:,}".format(r.compare_price - r.price) }}</span>
+            {% else %}
+              {{ settings.currency_symbol }}{{ "{:,}".format(r.price) }}
+            {% endif %}
+          </div>
+        </a>
+        <form class="add-to-cart-form card__add-form" action="{{ url_for('cart_add') }}" method="POST">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="product_id" value="{{ r.id }}">
+          <input type="hidden" name="quantity" value="1">
+          <button type="submit" class="card__add-btn">+ Add to Cart</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+<div class="mobile-buy-bar">
+  <span class="mobile-buy-bar__price">
+    {% if product.compare_price and product.compare_price > product.price %}
+      <span style="text-decoration:line-through; opacity:0.5; font-size:0.85em;">{{ settings.currency_symbol }}{{ "{:,}".format(product.compare_price) }}</span>
+      <span>{{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}</span>
+    {% else %}
+      {{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}
+    {% endif %}
+  </span>
+  <button class="btn" onclick="document.getElementById('buyerName').scrollIntoView({behavior:'smooth', block:'center'}); document.getElementById('buyerName').focus();">Buy Now</button>
+</div>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>const RAZORPAY_KEY = "{{ razorpay_key }}";</script>
+<script src="{{ url_for('static', filename='js/checkout.js') }}"></script>
+<script src="{{ url_for('static', filename='js/auto_coupons.js') }}"></script>
+<script>
+// Track recently viewed products in localStorage
+(function() {
+  var product = {
+    id: {{ product.id }},
+    name: {{ product.name|tojson }},
+    slug: {{ product.slug|tojson }},
+    price: {{ product.price }},
+    currency: {{ settings.currency_symbol|tojson }},
+    image: {{ (images and images[0])|tojson if images else 'null' }},
+    category: {{ (product.category or '')|tojson }}
+  };
+  try {
+    var viewed = JSON.parse(localStorage.getItem("recentlyViewed") || "[]");
+    viewed = viewed.filter(function(p) { return p.id !== product.id; });
+    viewed.unshift(product);
+    viewed = viewed.slice(0, 8);
+    localStorage.setItem("recentlyViewed", JSON.stringify(viewed));
+  } catch(e) {}
+})();
+</script>
+{% endblock %}

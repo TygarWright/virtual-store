@@ -1,0 +1,91 @@
+{# Self-contained phone/OTP sign-in modal — no Firebase needed.
+   Works entirely with our own backend: send code -> verify -> create account.
+   Opens from the nav "Sign In" link, the mobile menu, or checkout. #}
+<div class="auth-modal" id="authModal" aria-hidden="true">
+  <div class="auth-modal__backdrop" onclick="closeAuthModal()"></div>
+  <div class="auth-modal__panel" role="dialog" aria-modal="true" aria-labelledby="authModalTitle">
+
+    <!-- Step 1: Phone number -->
+    <div id="authStepPhone" class="auth-step auth-step--active">
+      <div class="auth-modal__icon">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="5" y="2" width="14" height="20" rx="2"></rect>
+          <line x1="12" y1="18" x2="12" y2="18"></line>
+        </svg>
+      </div>
+      <h3 id="authModalTitle">Welcome to {{ settings.site_name }}</h3>
+      <p class="auth-modal__hint">Verify your phone to unlock <strong>instant checkout</strong>, exclusive member deals, and real-time order updates via SMS. Your number stays private — we never share it.</p>
+      <div class="field">
+        <label>Phone Number</label>
+        <input type="tel" id="authPhoneInput" placeholder="+91 98765 43210" autocomplete="tel" inputmode="tel">
+        <small>Include your country code, e.g. +91 for India.</small>
+      </div>
+      <button type="button" class="btn btn--full" id="authSendCodeBtn" onclick="authSendCode()">Send Verification Code</button>
+      <p class="auth-modal__error" id="authPhoneError"></p>
+      <p class="auth-modal__legal">By continuing, you agree to receive a one-time verification code via SMS. Standard rates may apply.</p>
+    </div>
+
+    <!-- Step 2: OTP code -->
+    <div id="authStepCode" class="auth-step">
+      <div class="auth-modal__icon">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M9 12l2 2 4-4"></path>
+          <circle cx="12" cy="12" r="10"></circle>
+        </svg>
+      </div>
+      <h3>Enter Your Code</h3>
+      <p class="auth-modal__hint">We sent a 6-digit code to <span id="authPhoneDisplay" class="auth-modal__phone"></span></p>
+      <div class="auth-otp-inputs" id="authOtpInputs">
+        <input type="text" maxlength="1" inputmode="numeric" data-idx="0" aria-label="Digit 1">
+        <input type="text" maxlength="1" inputmode="numeric" data-idx="1" aria-label="Digit 2">
+        <input type="text" maxlength="1" inputmode="numeric" data-idx="2" aria-label="Digit 3">
+        <input type="text" maxlength="1" inputmode="numeric" data-idx="3" aria-label="Digit 4">
+        <input type="text" maxlength="1" inputmode="numeric" data-idx="4" aria-label="Digit 5">
+        <input type="text" maxlength="1" inputmode="numeric" data-idx="5" aria-label="Digit 6">
+      </div>
+      <div class="auth-otp-dev-hint" id="authDevHint" style="display:none;"></div>
+      <button type="button" class="btn btn--full" id="authVerifyBtn" onclick="authVerifyCode()">Verify & Continue</button>
+      <div class="auth-modal__row">
+        <button type="button" class="auth-modal__link" onclick="authResendCode()">Resend code</button>
+        <button type="button" class="auth-modal__link" onclick="authBackToPhone()">Change number</button>
+      </div>
+      <p class="auth-modal__error" id="authCodeError"></p>
+    </div>
+
+    <!-- Step 3: Details (new users) -->
+    <div id="authStepDetails" class="auth-step">
+      <div class="auth-modal__icon">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      </div>
+      <h3>One Last Thing</h3>
+      <p class="auth-modal__hint">What should we call you? Add your name so we can personalize your experience.</p>
+      <div class="field">
+        <label>Full Name</label>
+        <input type="text" id="authNameInput" placeholder="Your name" autocomplete="name">
+      </div>
+      <div class="field">
+        <label>Email <span class="auth-modal__optional">(optional)</span></label>
+        <input type="email" id="authEmailInput" placeholder="you@example.com" autocomplete="email">
+        <small>For order receipts and updates.</small>
+      </div>
+      <button type="button" class="btn btn--full" id="authFinishBtn" onclick="authFinish()">Complete Sign Up</button>
+      <p class="auth-modal__error" id="authDetailsError"></p>
+    </div>
+
+    <!-- Step 4: Success -->
+    <div id="authStepSuccess" class="auth-step auth-step--success">
+      <div class="auth-success-check">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 6L9 17l-5-5"></path>
+        </svg>
+      </div>
+      <h3 id="authSuccessName">Welcome!</h3>
+      <p class="auth-modal__hint">You're all set. Enjoy your personalized shopping experience.</p>
+    </div>
+
+    <button type="button" class="auth-modal__close" onclick="closeAuthModal()" aria-label="Close">&times;</button>
+  </div>
+</div>

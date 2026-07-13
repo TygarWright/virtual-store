@@ -1,0 +1,76 @@
+{% extends "admin/base.html" %}
+{% block title %}Order {{ order.order_ref }}{% endblock %}
+{% block content %}
+<div class="admin-topbar">
+  <h1>Order {{ order.order_ref }}</h1>
+  <a href="{{ url_for('admin_orders') }}" class="btn btn--outline btn--sm">← Back to Orders</a>
+</div>
+
+<div class="card-box">
+  <h3>Details</h3>
+  {% if order_items %}
+    <p><strong>Items:</strong></p>
+    <table class="table" style="margin-bottom:1rem;">
+      <tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Line Total</th></tr>
+      {% for it in order_items %}
+      <tr>
+        <td>{{ it.product_name }}</td>
+        <td>{{ it.quantity }}</td>
+        <td>₹{{ "{:,}".format(it.unit_price) }}</td>
+        <td>₹{{ "{:,}".format(it.line_total) }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% else %}
+    <p><strong>Product:</strong> {{ order.product_name }}</p>
+  {% endif %}
+  <p><strong>Amount:</strong> ₹{{ "{:,}".format(order.amount) }}</p>
+  {% if order.coupon_code %}
+  <p><strong>Coupon Used:</strong> {{ order.coupon_code }} (saved customer ₹{{ order.discount_amount }})</p>
+  {% endif %}
+  <p><strong>Status:</strong> <span class="badge badge--{{ order.status }}">{{ order.status }}</span></p>
+  <p><strong>Customer:</strong> {{ order.customer_name }}</p>
+  <p><strong>Email:</strong> {{ order.customer_email }}</p>
+  <p><strong>Phone:</strong> {{ order.customer_phone or "—" }}</p>
+  <p><strong>Ordered:</strong> {{ order.created_at }}</p>
+  {% if order.paid_at %}<p><strong>Paid:</strong> {{ order.paid_at }}</p>{% endif %}
+  {% if order.delivered_at %}<p><strong>Delivered:</strong> {{ order.delivered_at }}</p>{% endif %}
+</div>
+
+{% if order.status == 'paid' %}
+<div class="card-box">
+  <h3>Deliver This Order</h3>
+  <p class="help-text" style="margin-top:0;">
+    Write whatever the customer needs to receive their product — a download link, an activation code,
+    login details, or instructions. This will be shown on their order tracking page{% if email_enabled %} and emailed to them{% endif %}.
+  </p>
+  <form method="POST" action="{{ url_for('admin_order_deliver', order_id=order.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field">
+      <label>Delivery Message</label>
+      <textarea name="delivery_message" style="min-height:140px;" required placeholder="e.g. Here is your download link: ..."></textarea>
+    </div>
+    <button class="btn" type="submit">Mark as Delivered & Notify Customer</button>
+  </form>
+</div>
+{% elif order.status == 'delivered' %}
+<div class="card-box">
+  <h3>{{ "Delivered Automatically" if order.auto_delivered else "Delivery Message Sent" }}</h3>
+  {% if order.auto_delivered %}
+  <p class="help-text" style="margin-top:0;">
+    This order matched one or more products set to "Automatic" delivery, so it was delivered
+    the instant payment was confirmed — no admin action was needed.
+  </p>
+  {% endif %}
+  <div style="white-space:pre-line;">{{ order.delivery_message }}</div>
+</div>
+{% endif %}
+
+{% if order.status in ['created', 'paid'] %}
+<form method="POST" action="{{ url_for('admin_order_cancel', order_id=order.id) }}"
+      onsubmit="return confirm('Cancel this order?');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button class="btn btn--danger btn--sm" type="submit">Cancel Order</button>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,138 @@
+{% extends "admin/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="admin-topbar"><h1>How's your store doing?</h1></div>
+
+{% if not razorpay_configured %}
+<div class="flash flash--error">
+  <strong>Payments aren't set up yet.</strong> Customers can browse but can't pay. Ask whoever manages your hosting to add your Razorpay keys to the site settings. This is a one-time thing.
+</div>
+{% endif %}
+
+{% if stats.pending > 0 %}
+<div class="admin-action-banner">
+  <div class="admin-action-banner__icon">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+  </div>
+  <div class="admin-action-banner__content">
+    <h3>You have {{ stats.pending }} order{{ 's' if stats.pending != 1 else '' }} to deliver</h3>
+    <p>Customers are waiting. Deliver them now to keep everyone happy.</p>
+  </div>
+  <a href="{{ url_for('admin_orders', status='paid') }}" class="btn btn--invert">Deliver Now →</a>
+</div>
+{% else %}
+<div class="admin-action-banner admin-action-banner--good">
+  <div class="admin-action-banner__icon">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+  </div>
+  <div class="admin-action-banner__content">
+    <h3>All caught up!</h3>
+    <p>No orders waiting to be delivered. Take a breather.</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="stat-grid">
+  <div class="stat-card stat-card--hero">
+    <div class="num">{{ settings.currency_symbol }}{{ "{:,}".format(stats.revenue) }}</div>
+    <div class="label">Total Revenue</div>
+  </div>
+  <div class="stat-card">
+    <div class="num">{{ stats.products }}</div>
+    <div class="label">Products Live</div>
+  </div>
+  <div class="stat-card">
+    <div class="num">{{ stats.delivered }}</div>
+    <div class="label">Orders Delivered</div>
+  </div>
+  <div class="stat-card">
+    <div class="num">{{ stats.pending }}</div>
+    <div class="label">Need Delivery</div>
+  </div>
+</div>
+
+<div class="dash-grid">
+  <div class="card-box">
+    <h3>Revenue — Last 14 Days</h3>
+    {% set max_total = (revenue_trend|map(attribute='total')|max) or 1 %}
+    <svg class="sparkline" viewBox="0 0 280 90" preserveAspectRatio="none" role="img" aria-label="Revenue trend for the last 14 days">
+      {% set points = [] %}
+      {% for d in revenue_trend %}
+        {% set x = (loop.index0 / (revenue_trend|length - 1)) * 280 if revenue_trend|length > 1 else 0 %}
+        {% set y = 85 - ((d.total / max_total) * 75 if max_total else 0) %}
+        {% if points.append((x, y)) %}{% endif %}
+      {% endfor %}
+      <polyline
+        fill="none" stroke="currentColor" stroke-width="2"
+        points="{% for p in points %}{{ '%.1f'|format(p[0]) }},{{ '%.1f'|format(p[1]) }}{% if not loop.last %} {% endif %}{% endfor %}" />
+      {% for p in points %}
+        <circle cx="{{ '%.1f'|format(p[0]) }}" cy="{{ '%.1f'|format(p[1]) }}" r="2.5" fill="currentColor"></circle>
+      {% endfor %}
+    </svg>
+    <div class="sparkline-caption">
+      <span>{{ revenue_trend[0].day[5:] if revenue_trend }}</span>
+      <span>Peak: {{ settings.currency_symbol }}{{ "{:,}".format(max_total) }}</span>
+      <span>{{ revenue_trend[-1].day[5:] if revenue_trend }}</span>
+    </div>
+  </div>
+
+  <div class="card-box">
+    <h3>Best Sellers</h3>
+    {% if top_products %}
+    <ul class="top-products">
+      {% for p in top_products %}
+      <li>
+        <span class="top-products__name">{{ p.product_name }}</span>
+        <span class="top-products__meta">{{ p.orders_count }} order{{ 's' if p.orders_count != 1 else '' }} · {{ settings.currency_symbol }}{{ "{:,}".format(p.revenue) }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty-state" style="padding:1.5rem 0;">No sales yet. Add products and share your store link!</div>
+    {% endif %}
+  </div>
+</div>
+
+<h3 style="margin-top:2.5rem;">Recent Orders</h3>
+{% if recent_orders %}
+<div class="admin-order-cards">
+  {% for o in recent_orders %}
+  <a href="{{ url_for('admin_order_detail', order_id=o.id) }}" class="admin-order-card">
+    <div class="admin-order-card__top">
+      <span class="admin-order-card__ref">{{ o.order_ref }}</span>
+      <span class="badge badge--{{ o.status }}">{{ o.status }}</span>
+    </div>
+    <div class="admin-order-card__product">{{ o.product_name }}</div>
+    <div class="admin-order-card__bottom">
+      <span>{{ o.customer_name }}</span>
+      <span class="admin-order-card__amount">{{ settings.currency_symbol }}{{ "{:,}".format(o.amount) }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No orders yet. Your store is ready — start sharing it!</div>
+{% endif %}
+
+<div class="admin-quick-actions">
+  <h3>Quick Actions</h3>
+  <div class="admin-quick-actions__grid">
+    <a href="{{ url_for('admin_product_new') }}" class="admin-quick-action">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span>Add Product</span>
+    </a>
+    <a href="{{ url_for('admin_orders', status='paid') }}" class="admin-quick-action">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+      <span>Deliver Orders</span>
+    </a>
+    <a href="{{ url_for('admin_coupons') }}" class="admin-quick-action">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12v10H4V12"></path><path d="M2 7h20v5H2z"></path></svg>
+      <span>New Coupon</span>
+    </a>
+    <a href="{{ url_for('admin_settings') }}" class="admin-quick-action">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      <span>Edit Settings</span>
+    </a>
+  </div>
+</div>
+{% endblock %}

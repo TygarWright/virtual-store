@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="theme-color" content="#0a0a0a">
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<title>{% block title %}{{ settings.site_name }}{% endblock %}</title>
+<meta name="description" content="{{ settings.meta_description }}">
+<meta property="og:title" content="{% block og_title %}{{ settings.site_name }}{% endblock %}">
+<meta property="og:description" content="{{ settings.meta_description }}">
+<meta property="og:type" content="website">
+{% block og_image %}{% endblock %}
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="{% block canonical %}{{ request.url_root.rstrip('/') }}{{ request.path }}{% endblock %}">
+<link rel="sitemap" type="application/xml" href="{{ url_for('sitemap') }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+{% if firebase_auth_enabled %}
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script>window.FIREBASE_CONFIG = {{ firebase_config|tojson }};</script>
+{% endif %}
+{% block head %}{% endblock %}
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="scroll-progress"></div>
+
+{% if customer_logged_in and current_customer_name %}
+<div class="user-greeting" id="userGreeting">
+  <span class="greeting__wave">👋</span>
+  <span class="greeting__text">Hey, <span class="greeting__name">{{ current_customer_name }}</span></span>
+</div>
+<script>document.getElementById('userGreeting').classList.add('greeting--visible');</script>
+{% endif %}
+
+<nav class="nav">
+  <div class="container">
+    <a href="{{ url_for('home') }}" class="nav__brand">{{ settings.site_name }}</a>
+    <form class="nav__search" action="{{ url_for('home') }}" method="GET" role="search">
+      <div class="nav__search-wrap">
+        <span class="type-spark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <input type="search" name="q" id="navSearchInput" placeholder="Search products…" aria-label="Search products" value="{{ search_query or '' }}" autocomplete="off">
+        <div class="search-dropdown" id="searchDropdown" role="listbox"></div>
+      </div>
+      <button type="submit" aria-label="Search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </button>
+    </form>
+    <div class="nav__links">
+      <a href="{{ url_for('home') }}#products">Shop</a>
+      <a href="{{ url_for('home') }}#about">About</a>
+      <a href="{{ url_for('track_order') }}">Track</a>
+      <a href="#" onclick="openAuthModal(); return false;" data-auth-signed-out
+         style="display:{{ 'none' if customer_logged_in else '' }};">Sign In</a>
+      <form method="POST" action="{{ url_for('auth_logout') }}"
+            style="display:{{ '' if customer_logged_in else 'none' }};">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="nav__account-btn" data-auth-signed-in>{{ current_customer_name or current_customer_phone or 'Account' }}</button>
+      </form>
+    </div>
+    <div class="nav__cart-wrap">
+      <a href="{{ url_for('view_cart') }}" class="nav__cart" id="navCart" aria-label="View cart, {{ cart_count }} item{{ 's' if cart_count != 1 else '' }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+        {% if cart_count > 0 %}<span class="nav__cart-badge">{{ cart_count }}</span>{% endif %}
+      </a>
+      <div class="cart-preview" id="cartPreview"></div>
+    </div>
+    <button class="nav__toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+  <div class="mobile-menu" id="mobileMenu">
+    <div class="mobile-menu__search">
+      <form action="{{ url_for('home') }}" method="GET" role="search">
+        <input type="search" name="q" placeholder="Search products…" aria-label="Search products" value="{{ search_query or '' }}">
+        <button type="submit" aria-label="Search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </button>
+      </form>
+    </div>
+    <a href="{{ url_for('home') }}#products">Shop</a>
+    <a href="{{ url_for('home') }}#about">About</a>
+    <a href="{{ url_for('track_order') }}">Track Order</a>
+    <a href="{{ url_for('view_cart') }}">Cart{% if cart_count > 0 %} ({{ cart_count }}){% endif %}</a>
+    {% if customer_logged_in %}
+    <form method="POST" action="{{ url_for('auth_logout') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="nav__account-btn">Sign out ({{ current_customer_name or current_customer_phone }})</button>
+    </form>
+    {% else %}
+    <a href="#" onclick="openAuthModal(); return false;" class="mobile-menu__signin">Sign In / Sign Up</a>
+    {% endif %}
+  </div>
+</nav>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="container" style="padding-top:1.5rem;">
+      {% for category, message in messages %}
+        <div class="flash flash--{{ category }}" role="status">{{ message }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+<main id="main">
+{% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+    <div class="container footer__grid">
+      <div class="footer__brand">
+        <span class="footer__logo">{{ settings.site_name }}</span>
+        <p>{{ settings.footer_text }}</p>
+        <div class="footer__policies">
+          <a href="{{ url_for('home') }}#about">About Us</a>
+          <a href="{{ url_for('home') }}#faq">FAQ</a>
+          <a href="{{ url_for('track_order') }}">Track Order</a>
+        </div>
+      </div>
+      <nav class="footer__col" aria-label="Footer">
+        <span class="eyebrow">Shop</span>
+        <a href="{{ url_for('home') }}#products">All Products</a>
+        <a href="{{ url_for('home') }}#about">About</a>
+        <a href="{{ url_for('track_order') }}">Track Order</a>
+      </nav>
+      <div class="footer__col">
+        <span class="eyebrow">Contact</span>
+        <a href="mailto:{{ settings.contact_email }}">{{ settings.contact_email }}</a>
+        <a href="tel:{{ settings.contact_phone }}">{{ settings.contact_phone }}</a>
+      </div>
+    </div>
+    <div class="container footer__bottom">
+      <span>&copy; {{ settings.site_name }}</span>
+      <span>Secure checkout via Razorpay</span>
+    </div>
+  </footer>
+<button class="back-to-top" id="backToTop" aria-label="Back to top" onclick="window.scrollTo({top:0,behavior:'smooth'})">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
+</button>
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
+<div class="cookie-banner" id="cookieBanner">
+  <span class="cookie-banner__text">We use cookies to enhance your browsing experience and analyze site traffic. By continuing, you agree to our use of cookies.</span>
+  <div class="cookie-banner__btns">
+    <button class="cookie-banner__btn" onclick="dismissCookie('declined')">Decline</button>
+    <button class="cookie-banner__btn cookie-banner__btn--primary" onclick="dismissCookie('accepted')">Accept</button>
+  </div>
+</div>
+{% include "_auth_modal.html" %}
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
+<!-- Mobile bottom navigation - native app feel -->
+<nav class="bottom-nav" id="bottomNav" aria-label="Quick navigation">
+  <a href="{{ url_for('home') }}" class="bottom-nav__item {% if request.endpoint == 'home' and not request.args.get('q') %}bottom-nav__item--active{% endif %}">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+    <span>Home</span>
+  </a>
+  <a href="{{ url_for('home') }}#products" class="bottom-nav__item">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3h7v7H3z"></path><path d="M14 3h7v7h-7z"></path><path d="M14 14h7v7h-7z"></path><path d="M3 14h7v7H3z"></path></svg>
+    <span>Shop</span>
+  </a>
+  <a href="{{ url_for('view_cart') }}" class="bottom-nav__item bottom-nav__item--cart {% if request.endpoint == 'view_cart' %}bottom-nav__item--active{% endif %}">
+    <div class="bottom-nav__cart-icon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+      {% if cart_count > 0 %}<span class="bottom-nav__badge">{{ cart_count }}</span>{% endif %}
+    </div>
+    <span>Cart</span>
+  </a>
+  {% if customer_logged_in %}
+  <a href="#" onclick="event.preventDefault();" class="bottom-nav__item bottom-nav__item--active">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+    <span>{{ (current_customer_name or 'Me')[:8] }}</span>
+  </a>
+  {% else %}
+  <a href="#" onclick="openAuthModal(); return false;" class="bottom-nav__item">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+    <span>Sign In</span>
+  </a>
+  {% endif %}
+</nav>
+
+<script src="{{ url_for('static', filename='js/animations.js') }}"></script>
+<script src="{{ url_for('static', filename='js/cart.js') }}"></script>
+<script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

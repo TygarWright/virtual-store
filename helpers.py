@@ -1,0 +1,397 @@
+import os
+import re
+import time
+import secrets
+import smtplib
+import threading
+from datetime import datetime, timezone
+from email.mime.text import MIMEText
+from functools import wraps
+
+import requests
+from flask import session, redirect, url_for, request, abort, jsonify
+from werkzeug.utils import secure_filename
+from PIL import Image, UnidentifiedImageError
+
+import config
+
+
+# ---------- Auth (admin) ----------
+
+def login_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("admin_id"):
+            return redirect(url_for("admin_login", next=request.path))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+# ---------- Auth (customer, via Firebase phone/OTP) ----------
+
+def customer_login_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("customer_id"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Please sign in first."}), 401
+            return redirect(url_for("home"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def firebase_auth_enabled():
+    return bool(config.FIREBASE_API_KEY and config.FIREBASE_PROJECT_ID)
+
+
+def verify_firebase_id_token(id_token):
+    """Verifies a Firebase Auth ID token sent up from the browser after a
+    successful phone/OTP sign-in, using Google's public certs — no service
+    account or firebase-admin dependency needed. Returns the decoded token
+    dict (with at least 'uid'/'sub' and optionally 'phone_number') on
+    success, or None if the token is missing/invalid/expired/wrong project.
+    google-auth is an optional dependency: if it isn't installed, phone
+    auth silently behaves as disabled rather than crashing the site."""
+    if not id_token or not firebase_auth_enabled():
+        return None
+    try:
+        from google.auth.transport import requests as google_requests
+        from google.oauth2 import id_token as google_id_token
+    except ImportError:
+        return None
+    try:
+        decoded = google_id_token.verify_firebase_token(
+            id_token, google_requests.Request(), audience=config.FIREBASE_PROJECT_ID
+        )
+        return decoded
+    except Exception:
+        return None
+
+
+# ---------- CSRF (lightweight, no extra dependency) ----------
+# Two flavours: `check_csrf()` for normal HTML <form> POSTs (token comes in
+# the form body), and `check_csrf_api()` for JSON fetch() calls, where the
+# token travels in an `X-CSRF-Token` header instead (forms don't send custom
+# headers, which is exactly why this split exists).
+
+def get_csrf_token():
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_hex(16)
+    return session["csrf_token"]
+
+
+def check_csrf():
+    token = request.form.get("csrf_token", "")
+    expected = session.get("csrf_token", "")
+    if not token or not expected or not secrets.compare_digest(token, expected):
+        abort(400, description="Your session expired — please refresh and try again.")
+
+
+def check_csrf_api():
+    """For requests made via fetch() rather than a plain form submit — covers
+    JSON bodies (token in body or header) and FormData bodies sent via fetch
+    (token travels as a normal form field there, same as check_csrf())."""
+    token = request.headers.get("X-CSRF-Token", "")
+    if not token:
+        data = request.get_json(silent=True) or {}
+        token = data.get("csrf_token", "")
+    if not token:
+        token = request.form.get("csrf_token", "")
+    expected = session.get("csrf_token", "")
+    if not token or not expected or not secrets.compare_digest(token, expected):
+        response = jsonify({"error": "Your session expired — please refresh the page and try again."})
+        response.status_code = 400
+        abort(response)
+
+
+# ---------- Rate limiting (simple, in-process — no Redis needed) ----------
+# Good enough for a single small instance. Resets on restart, and only tracks
+# this one worker process — not a substitute for a real service at scale, but
+# stops casual scripted abuse of login/checkout/coupon/newsletter endpoints.
+
+_rate_buckets = {}
+_rate_lock = threading.Lock()
+
+
+def _client_ip():
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
+def rate_limited(key_prefix, max_attempts, window_seconds):
+    """Returns True if the current client has exceeded max_attempts within
+    window_seconds for this key_prefix. Also records the current attempt."""
+    key = f"{key_prefix}:{_client_ip()}"
+    now = time.time()
+    with _rate_lock:
+        bucket = _rate_buckets.setdefault(key, [])
+        # drop anything outside the window
+        cutoff = now - window_seconds
+        while bucket and bucket[0] < cutoff:
+            bucket.pop(0)
+        if len(bucket) >= max_attempts:
+            return True
+        bucket.append(now)
+        # keep the whole structure from growing forever
+        if len(_rate_buckets) > 5000:
+            _rate_buckets.clear()
+        return False
+
+
+def rate_limit(key_prefix, max_attempts, window_seconds):
+    """Decorator form of rate_limited(), for use directly on a route."""
+    def decorator(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if rate_limited(key_prefix, max_attempts, window_seconds):
+                if request.is_json or request.path.startswith("/api/"):
+                    return jsonify({"error": "Too many attempts — please wait a minute and try again."}), 429
+                flash_msg = "Too many attempts — please wait a minute and try again."
+                from flask import flash as _flash
+                _flash(flash_msg, "error")
+                return redirect(request.referrer or url_for("home"))
+            return view(*args, **kwargs)
+        return wrapped
+    return decorator
+
+
+# ---------- CAPTCHA (Cloudflare Turnstile — free, no account limits) ----------
+
+def turnstile_enabled():
+    return bool(config.TURNSTILE_SITE_KEY and config.TURNSTILE_SECRET_KEY)
+
+
+def verify_turnstile(token):
+    """Returns True if Turnstile is not configured (so the site works before
+    setup) or if the token is valid. Returns False only on a real failure."""
+    if not turnstile_enabled():
+        return True
+    if not token:
+        return False
+    try:
+        resp = requests.post(
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            data={
+                "secret": config.TURNSTILE_SECRET_KEY,
+                "response": token,
+                "remoteip": _client_ip(),
+            },
+            timeout=8,
+        )
+        return bool(resp.json().get("success"))
+    except Exception:
+        return False
+
+
+# ---------- Slugs ----------
+
+def slugify(text):
+    text = text.lower().strip()
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    text = re.sub(r"-+", "-", text).strip("-")
+    return text or secrets.token_hex(4)
+
+
+# ---------- Images ----------
+
+def allowed_image(filename):
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    return ext in config.ALLOWED_IMAGE_EXTENSIONS
+
+
+def save_product_image(file_storage):
+    """
+    Saves an uploaded image, resized so the longest side is at most
+    MAX_IMAGE_DIMENSION px, re-encoded efficiently. Keeps the storefront
+    fast regardless of what the admin uploads from their phone/camera.
+    Returns the stored filename.
+    """
+    if not file_storage or file_storage.filename == "":
+        return None
+    if not allowed_image(file_storage.filename):
+        raise ValueError("Please upload a PNG, JPG or WEBP image.")
+
+    # Verify this is actually a valid, safe-to-decode image before touching it —
+    # Image.open() alone doesn't fully parse the file, so a corrupt or
+    # disguised upload could otherwise slip through.
+    try:
+        file_storage.stream.seek(0)
+        probe = Image.open(file_storage.stream)
+        probe.verify()
+    except (UnidentifiedImageError, OSError, ValueError):
+        raise ValueError("That file doesn't look like a valid image. Please try a different file.")
+    finally:
+        file_storage.stream.seek(0)
+
+    os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
+    ext = file_storage.filename.rsplit(".", 1)[-1].lower()
+    filename = secure_filename(f"{secrets.token_hex(8)}.{ext}")
+    path = os.path.join(config.UPLOAD_FOLDER, filename)
+
+    image = Image.open(file_storage)
+    image.load()
+
+    # JPEG has no alpha channel — flatten transparency onto white instead of
+    # letting Pillow error out (or silently corrupt colours) on save.
+    if ext in ("jpg", "jpeg"):
+        if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
+            background = Image.new("RGB", image.size, (255, 255, 255))
+            rgba = image.convert("RGBA")
+            background.paste(rgba, mask=rgba.split()[-1])
+            image = background
+        elif image.mode != "RGB":
+            image = image.convert("RGB")
+    elif image.mode not in ("RGB", "RGBA"):
+        image = image.convert("RGBA" if "A" in image.getbands() else "RGB")
+
+    w, h = image.size
+    longest = max(w, h)
+    if longest > config.MAX_IMAGE_DIMENSION:
+        scale = config.MAX_IMAGE_DIMENSION / longest
+        image = image.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+
+    save_kwargs = {"quality": 85, "optimize": True} if ext in ("jpg", "jpeg") else {"optimize": True}
+    image.save(path, **save_kwargs)
+    return filename
+
+
+def delete_file_quietly(filename):
+    try:
+        os.remove(os.path.join(config.UPLOAD_FOLDER, filename))
+    except OSError:
+        pass
+
+
+# ---------- OTP (self-contained, no external service needed) ----------
+
+def generate_otp_code():
+    """Random 6-digit numeric code."""
+    return f"{secrets.randbelow(1000000):06d}"
+
+
+def store_otp(conn, phone, code, name="", email=""):
+    """Store an OTP in the database with an expiry. Invalidates any previous
+    unused OTPs for the same phone first, so only the latest one works."""
+    from datetime import timedelta
+    now_str = datetime.now(timezone.utc).isoformat()
+    expires = (datetime.now(timezone.utc) + timedelta(minutes=config.OTP_EXPIRY_MINUTES)).isoformat()
+    conn.execute("UPDATE otps SET used = 1 WHERE phone = ? AND used = 0", (phone,))
+    conn.execute(
+        "INSERT INTO otps (phone, code, name, email, created_at, expires_at, used) VALUES (?, ?, ?, ?, ?, ?, 0)",
+        (phone, code, name, email, now_str, expires),
+    )
+
+
+def verify_otp_code(conn, phone, code):
+    """Check whether the given code matches the latest unused, unexpired OTP
+    for this phone. Returns (True, stored_name, stored_email) on success,
+    (False, "", "") on failure. Marks the OTP as used on success."""
+    row = conn.execute(
+        "SELECT * FROM otps WHERE phone = ? AND code = ? AND used = 0 ORDER BY id DESC LIMIT 1",
+        (phone, code),
+    ).fetchone()
+    if not row:
+        return False, "", ""
+    # Check expiry
+    now_str = datetime.now(timezone.utc).isoformat()
+    if row["expires_at"] < now_str:
+        return False, "", ""
+    conn.execute("UPDATE otps SET used = 1 WHERE id = ?", (row["id"],))
+    return True, row["name"], row["email"]
+
+
+# ---------- Email (optional — Resend or SendGrid preferred, SMTP fallback) ----------
+# Three interchangeable ways to send mail, tried in this order: Resend (HTTP
+# API, no SMTP setup needed), SendGrid (HTTP API), then classic SMTP. Any one
+# of them being configured is enough — the site works the same either way,
+# callers just call send_email() and don't need to know which is active.
+
+def email_enabled():
+    return bool(
+        config.RESEND_API_KEY or config.SENDGRID_API_KEY
+        or (config.SMTP_HOST and config.SMTP_USERNAME and config.SMTP_PASSWORD)
+    )
+
+
+def _from_header():
+    name = config.EMAIL_FROM_NAME.strip()
+    addr = config.EMAIL_FROM or config.SMTP_FROM
+    return f"{name} <{addr}>" if name else addr
+
+
+def _send_via_resend(to_address, subject, body):
+    resp = requests.post(
+        "https://api.resend.com/emails",
+        headers={"Authorization": f"Bearer {config.RESEND_API_KEY}"},
+        json={
+            "from": _from_header(),
+            "to": [to_address],
+            "subject": subject,
+            "text": body,
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return True
+
+
+def _send_via_sendgrid(to_address, subject, body):
+    from_addr = config.EMAIL_FROM or config.SMTP_FROM
+    resp = requests.post(
+        "https://api.sendgrid.com/v3/mail/send",
+        headers={
+            "Authorization": f"Bearer {config.SENDGRID_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "personalizations": [{"to": [{"email": to_address}]}],
+            "from": {
+                "email": from_addr,
+                **({"name": config.EMAIL_FROM_NAME} if config.EMAIL_FROM_NAME else {}),
+            },
+            "subject": subject,
+            "content": [{"type": "text/plain", "value": body}],
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return True
+
+
+def _send_via_smtp(to_address, subject, body):
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = _from_header()
+    msg["To"] = to_address
+    with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=15) as server:
+        server.starttls()
+        server.login(config.SMTP_USERNAME, config.SMTP_PASSWORD)
+        server.sendmail(config.EMAIL_FROM or config.SMTP_FROM, [to_address], msg.as_string())
+    return True
+
+
+def send_email(to_address, subject, body):
+    """Best-effort — tries providers in priority order and returns True the
+    moment one succeeds. Never raises: a broken email provider should never
+    take down checkout or delivery, it should just mean the customer doesn't
+    get the automated email (the order/delivery itself still goes through)."""
+    if not email_enabled():
+        return False
+    if config.RESEND_API_KEY:
+        try:
+            return _send_via_resend(to_address, subject, body)
+        except Exception:
+            pass
+    if config.SENDGRID_API_KEY:
+        try:
+            return _send_via_sendgrid(to_address, subject, body)
+        except Exception:
+            pass
+    if config.SMTP_HOST and config.SMTP_USERNAME and config.SMTP_PASSWORD:
+        try:
+            return _send_via_smtp(to_address, subject, body)
+        except Exception:
+            pass
+    return False
