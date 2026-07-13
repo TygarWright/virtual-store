@@ -11,7 +11,7 @@
     <div class="hero__cta-group">
       <a href="#products" class="btn">Explore the Catalogue</a>
       {% if not customer_logged_in %}
-      <a href="#" onclick="openAuthModal(); return false;" class="btn btn--outline hero__cta-secondary">Join with Phone</a>
+      <a href="#" onclick="openAuthModal(); return false;" class="btn btn--outline hero__cta-secondary" data-auth-signed-out>Join with Phone</a>
       {% endif %}
     </div>
     <div class="hero__scroll-cue">
@@ -255,7 +255,7 @@
 })();
 </script>
 {% if not customer_logged_in %}
-<div class="signup-prompt" id="signupPrompt">
+<div class="signup-prompt" id="signupPrompt" data-auth-signed-out>
   <button class="signup-prompt__close" onclick="dismissSignupPrompt()" aria-label="Close">&times;</button>
   <span class="signup-prompt__text"><strong>Unlock member perks.</strong> Sign in with your phone for instant checkout and exclusive deals.</span>
   <button class="btn btn--invert" onclick="dismissSignupPrompt(); openAuthModal();">Sign In Now</button>

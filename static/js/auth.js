@@ -291,10 +291,11 @@ function authShowSuccess(name, phone, email) {
 
   if (window.showToast) window.showToast(`Signed in as ${name || phone}`, "success");
 
-  // Auto-close after showing success
+  // Reload the page so all server-conditional elements (Join with Phone,
+  // signup prompt, nav links) sync with the new session state.
   setTimeout(() => {
-    closeAuthModal();
-  }, 2000);
+    window.location.reload();
+  }, 1500);
 }
 
 // ---------- OTP input behavior: auto-advance, paste, backspace ----------

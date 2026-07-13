@@ -11,7 +11,13 @@
 <body>
 <div class="admin-shell">
   <aside class="admin-sidebar">
-    <a href="{{ url_for('admin_dashboard') }}" class="admin-sidebar__brand">{{ settings.site_name }} Admin</a>
+    <div class="admin-sidebar__header">
+      <a href="{{ url_for('admin_dashboard') }}" class="admin-sidebar__brand">{{ settings.site_name }}</a>
+      <form method="POST" action="{{ url_for('admin_logout') }}" class="admin-mobile-logout">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" aria-label="Log out">⏻</button>
+      </form>
+    </div>
     <form method="POST" action="{{ url_for('admin_logout') }}" class="admin-mobile-logout" style="margin:0;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="admin-nav__logout-btn" style="display:flex; align-items:center; gap:0.3rem; font-size:0.78rem; padding:0.4rem 0.6rem;" aria-label="Log out">
