@@ -34,9 +34,25 @@
 {% if customer_logged_in and current_customer_name %}
 <div class="user-greeting" id="userGreeting">
   <span class="greeting__wave">👋</span>
-  <span class="greeting__text">Hey, <span class="greeting__name">{{ current_customer_name }}</span></span>
+  <span class="greeting__text">Welcome back, <span class="greeting__name">{{ current_customer_name }}</span></span>
+  <button class="greeting__close" onclick="dismissGreeting()" aria-label="Dismiss greeting">×</button>
 </div>
-<script>document.getElementById('userGreeting').classList.add('greeting--visible');</script>
+<script>
+(function(){
+  var g = document.getElementById('userGreeting');
+  if (!g) return;
+  setTimeout(function(){ g.classList.add('greeting--visible'); }, 400);
+  window.dismissGreeting = function(){
+    g.classList.remove('greeting--visible');
+    g.classList.add('greeting--hiding');
+    setTimeout(function(){ g.style.display = 'none'; }, 500);
+  };
+  // Auto-dismiss after 6 seconds
+  setTimeout(function(){
+    if (g.classList.contains('greeting--visible')) window.dismissGreeting();
+  }, 6000);
+})();
+</script>
 {% endif %}
 
 <nav class="nav">

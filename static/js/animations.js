@@ -503,3 +503,153 @@ window.dismissCookie = function (val) {
   banner.classList.remove("show");
 };
 })();
+
+/* ============================================================
+ Engagement system — confetti, scroll reveal, card tilt,
+ magnetic buttons, heart burst, cart bounce
+ ============================================================ */
+(function () {
+"use strict";
+
+// ---- Confetti burst ----
+window.fireConfetti = function (x, y, opts) {
+opts = opts || {};
+var count = opts.count || 24;
+var colors = opts.colors || ["#0a0a0a", "#ffffff", "#8a8880", "#4a4944", "#d8d6d1"];
+var i, el, angle, velocity, rot;
+for (i = 0; i < count; i++) {
+  el = document.createElement("div");
+  el.className = "confetti-particle";
+  el.style.left = x + "px";
+  el.style.top = y + "px";
+  el.style.background = colors[i % colors.length];
+  if (Math.random() > 0.5) el.style.borderRadius = "999px";
+  document.body.appendChild(el);
+  angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
+  velocity = 80 + Math.random() * 120;
+  var dx = Math.cos(angle) * velocity;
+  var dy = Math.sin(angle) * velocity - 60;
+  rot = (Math.random() - 0.5) * 720;
+  el.animate([
+    { transform: "translate(0,0) rotate(0deg)", opacity: 1 },
+    { transform: "translate(" + dx + "px," + dy + "px) rotate(" + rot + "deg)", opacity: 0 }
+  ], {
+    duration: 700 + Math.random() * 400,
+    easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+    fill: "forwards"
+  });
+  (function (node) {
+    setTimeout(function () { node.remove(); }, 1200);
+  })(el);
+}
+};
+
+// ---- Scroll reveal via IntersectionObserver ----
+var revealEls = document.querySelectorAll(".reveal, .stagger-item");
+if (revealEls.length && "IntersectionObserver" in window) {
+var revealObs = new IntersectionObserver(function (entries) {
+  entries.forEach(function (entry) {
+    if (entry.isIntersecting) {
+      entry.target.classList.add(entry.target.classList.contains("reveal") ? "reveal--in" : "stagger--in");
+      revealObs.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.12, rootMargin: "0px 0px -40px 0px" });
+revealEls.forEach(function (el) { revealObs.observe(el); });
+} else {
+revealEls.forEach(function (el) {
+  el.classList.add("reveal--in", "stagger--in");
+});
+}
+
+// ---- Auto-tag grid children as stagger items ----
+var grids = document.querySelectorAll(".grid");
+grids.forEach(function (grid) {
+var children = Array.prototype.slice.call(grid.children);
+children.forEach(function (child, i) {
+  if (child.classList.contains("stagger-item") || child.classList.contains("reveal")) return;
+  child.classList.add("stagger-item");
+  child.style.transitionDelay = (i % 4) * 0.08 + "s";
+});
+if ("IntersectionObserver" in window) {
+  var gridObs = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("stagger--in");
+        gridObs.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.08, rootMargin: "0px 0px -30px 0px" });
+  Array.prototype.forEach.call(grid.children, function (c) { gridObs.observe(c); });
+} else {
+  Array.prototype.forEach.call(grid.children, function (c) { c.classList.add("stagger--in"); });
+}
+});
+
+// ---- 3D card tilt on mousemove (desktop only) ----
+if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
+document.querySelectorAll(".card").forEach(function (card) {
+  card.classList.add("card-tilt");
+  card.addEventListener("mousemove", function (e) {
+    var rect = card.getBoundingClientRect();
+    var px = (e.clientX - rect.left) / rect.width;
+    var py = (e.clientY - rect.top) / rect.height;
+    var rx = (py - 0.5) * -8;
+    var ry = (px - 0.5) * 8;
+    card.style.transform = "perspective(800px) rotateX(" + rx + "deg) rotateY(" + ry + "deg) translateY(-6px)";
+  });
+  card.addEventListener("mouseleave", function () {
+    card.style.transform = "";
+  });
+});
+}
+
+// ---- Magnetic button effect (desktop only) ----
+if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
+document.querySelectorAll(".hero .btn, .btn--primary, .btn--solid").forEach(function (btn) {
+  btn.classList.add("magnetic-btn");
+  btn.addEventListener("mousemove", function (e) {
+    var rect = btn.getBoundingClientRect();
+    var mx = e.clientX - rect.left - rect.width / 2;
+    var my = e.clientY - rect.top - rect.height / 2;
+    btn.style.transform = "translate(" + mx * 0.15 + "px," + my * 0.2 + "px)";
+  });
+  btn.addEventListener("mouseleave", function () {
+    btn.style.transform = "";
+  });
+});
+}
+
+// ---- Heart burst on double-tap / double-click product cards ----
+document.querySelectorAll(".card").forEach(function (card) {
+var lastTap = 0;
+card.addEventListener("click", function (e) {
+  var now = Date.now();
+  if (now - lastTap < 350) {
+    var heart = document.createElement("div");
+    heart.className = "heart-burst";
+    heart.textContent = "♥";
+    heart.style.left = (e.offsetX - 16) + "px";
+    heart.style.top = (e.offsetY - 16) + "px";
+    card.style.position = card.style.position || "relative";
+    card.appendChild(heart);
+    setTimeout(function () { heart.remove(); }, 600);
+  }
+  lastTap = now;
+});
+});
+
+// ---- Pulse ring on add-to-cart button click ----
+document.addEventListener("click", function (e) {
+var btn = e.target.closest(".add-to-cart-form button[type=submit]");
+if (!btn) return;
+var ring = document.createElement("span");
+ring.className = "btn-pulse-ring";
+var computedRadius = getComputedStyle(btn).borderRadius;
+ring.style.borderRadius = computedRadius || "2px";
+btn.style.position = btn.style.position || "relative";
+btn.appendChild(ring);
+setTimeout(function () { ring.remove(); }, 600);
+});
+
+})();

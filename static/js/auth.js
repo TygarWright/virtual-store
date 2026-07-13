@@ -286,7 +286,13 @@ function authShowSuccess(name, phone, email) {
   const greeting = document.getElementById("userGreeting");
   if (greeting) {
     greeting.querySelector(".greeting__name").textContent = name || "there";
-    greeting.classList.add("greeting--visible");
+    greeting.querySelector(".greeting__text").innerHTML = "Welcome back, <span class=\"greeting__name\">" + (name || "there") + "</span>";
+    greeting.style.display = "";
+    setTimeout(() => greeting.classList.add("greeting--visible"), 100);
+    // Auto-dismiss after 6s
+    setTimeout(() => {
+      if (greeting.classList.contains("greeting--visible") && window.dismissGreeting) window.dismissGreeting();
+    }, 6000);
   }
 
   if (window.showToast) window.showToast(`Signed in as ${name || phone}`, "success");

@@ -52,6 +52,27 @@
         if (res.ok && res.data.success) {
           updateCartBadges(res.data.cart_count);
           showToast('Added "' + res.data.product_name + '" to your cart.');
+
+          // Confetti burst from the button position
+          if (window.fireConfetti && btn) {
+            var rect = btn.getBoundingClientRect();
+            window.fireConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2, { count: 20 });
+          }
+
+          // Cart badge bounce
+          document.querySelectorAll(".nav__cart-badge, .bottom-nav__badge").forEach(function (badge) {
+            badge.classList.remove("cart-bounce");
+            void badge.offsetWidth;
+            badge.classList.add("cart-bounce");
+          });
+
+          // Cart icon jiggle
+          document.querySelectorAll(".nav__cart").forEach(function (cart) {
+            cart.classList.remove("cart-jiggle");
+            void cart.offsetWidth;
+            cart.classList.add("cart-jiggle");
+            setTimeout(function () { cart.classList.remove("cart-jiggle"); }, 600);
+          });
         } else {
           showToast(res.data.error || "Could not add to cart.", true);
         }
