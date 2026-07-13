@@ -18,6 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preload" href="{{ url_for('static', filename='css/style.css') }}" as="style">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 {% if firebase_auth_enabled %}
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
@@ -152,7 +153,9 @@
   </div>
 </div>
 {% include "_auth_modal.html" %}
+{% if turnstile_enabled %}
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+{% endif %}
 
 <!-- Mobile bottom navigation - native app feel -->
 <nav class="bottom-nav" id="bottomNav" aria-label="Quick navigation">

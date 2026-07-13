@@ -77,6 +77,22 @@ def set_security_headers(response):
         "base-uri 'self'; "
         "object-src 'none'",
     )
+
+    # HSTS — tell browsers to always use HTTPS for this site
+    if request.is_secure:
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains",
+        )
+
+    # Long-cache static files — Flask defaults to no-cache which forces
+    # re-downloading CSS/JS/fonts/images on every page load. Static files
+    # served from /static/ are content-addressed by the browser via ETag,
+    # so a 1-year cache with immutable is safe and massively cuts repeat
+    # page-load time.
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+
     return response
 
 
