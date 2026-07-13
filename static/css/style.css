@@ -800,6 +800,73 @@ body.menu-open { overflow: hidden; }
   padding: 0.3rem 0.6rem; border-radius: 999px;
 }
 
+/* ---------- Product ribbons ---------- */
+.card__ribbon {
+  position: absolute; top: 0.6rem; left: 0.6rem; z-index: 2;
+  font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 0.35rem 0.7rem; border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  animation: ribbonPulse 2s ease-in-out infinite;
+}
+.card__ribbon--sale { background: #e53e3e; color: #fff; }
+.card__ribbon--bestseller { background: #f59e0b; color: #fff; }
+.card__ribbon--new { background: #3b82f6; color: #fff; }
+.card__ribbon--hot { background: #ef4444; color: #fff; }
+.card__ribbon--trending { background: #8b5cf6; color: #fff; }
+.card__ribbon--limited { background: #1a1a1a; color: #fff; }
+.card__ribbon--exclusive { background: #d946ef; color: #fff; }
+.card__ribbon--featured { background: #10b981; color: #fff; }
+@keyframes ribbonPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+/* ---------- Strike-through pricing on cards ---------- */
+.card__price { display: flex; flex-direction: column; gap: 0.1rem; }
+.card__price-old {
+  text-decoration: line-through; color: var(--grey-400);
+  font-size: 0.85rem; font-weight: 400;
+}
+.card__price-new {
+  font-weight: 600; color: var(--black); font-size: 1.05rem;
+}
+.card__price-save {
+  font-size: 0.7rem; font-weight: 600; color: #e53e3e;
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+
+/* ---------- Product page ribbon + strike-through ---------- */
+.product-ribbon {
+  display: inline-block; font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 0.35rem 0.75rem; border-radius: 4px; margin-bottom: 0.6rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  animation: ribbonPulse 2s ease-in-out infinite;
+}
+.product-ribbon--sale { background: #e53e3e; color: #fff; }
+.product-ribbon--bestseller { background: #f59e0b; color: #fff; }
+.product-ribbon--new { background: #3b82f6; color: #fff; }
+.product-ribbon--hot { background: #ef4444; color: #fff; }
+.product-ribbon--trending { background: #8b5cf6; color: #fff; }
+.product-ribbon--limited { background: #1a1a1a; color: #fff; }
+.product-ribbon--exclusive { background: #d946ef; color: #fff; }
+.product-ribbon--featured { background: #10b981; color: #fff; }
+
+.product-price__compare {
+  text-decoration: line-through; color: var(--grey-400);
+  font-size: 1rem; font-weight: 400; margin-right: 0.5rem;
+}
+.product-price__current {
+  font-weight: 600; font-size: 1.5rem;
+}
+.product-price__discounted {
+  font-weight: 600; font-size: 1.5rem; margin-left: 0.5rem;
+}
+.product-price__save {
+  display: block; font-size: 0.82rem; font-weight: 600;
+  color: #e53e3e; margin-top: 0.3rem; text-transform: uppercase; letter-spacing: 0.03em;
+}
+
 /* ---------- Breadcrumb ---------- */
 .breadcrumb {
   font-size: 0.78rem; color: var(--grey-500); letter-spacing: 0.02em;

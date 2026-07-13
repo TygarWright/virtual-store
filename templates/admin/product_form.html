@@ -19,6 +19,26 @@
       <input type="number" name="price" min="0" step="1" value="{{ product.price if product else '' }}" required>
     </div>
     <div class="field">
+      <label>Compare-at Price (optional)</label>
+      <input type="number" name="compare_price" min="0" step="1" value="{{ product.compare_price if product and product.compare_price else '' }}" placeholder="e.g. 1800">
+      <small>Original price shown struck-through next to the selling price. Shows "Save ₹X" to create urgency. Leave blank if no discount.</small>
+    </div>
+    <div class="field">
+      <label>Product Ribbon (optional)</label>
+      <select name="ribbon">
+        <option value="" {{ 'selected' if not product or not product.ribbon }}></option>
+        <option value="Sale" {{ 'selected' if product and product.ribbon == 'Sale' }}>Sale</option>
+        <option value="Bestseller" {{ 'selected' if product and product.ribbon == 'Bestseller' }}>Bestseller</option>
+        <option value="New" {{ 'selected' if product and product.ribbon == 'New' }}>New</option>
+        <option value="Hot" {{ 'selected' if product and product.ribbon == 'Hot' }}>Hot</option>
+        <option value="Trending" {{ 'selected' if product and product.ribbon == 'Trending' }}>Trending</option>
+        <option value="Limited" {{ 'selected' if product and product.ribbon == 'Limited' }}>Limited</option>
+        <option value="Exclusive" {{ 'selected' if product and product.ribbon == 'Exclusive' }}>Exclusive</option>
+        <option value="Featured" {{ 'selected' if product and product.ribbon == 'Featured' }}>Featured</option>
+      </select>
+      <small>Eye-catching label shown on the product card image. Pick one that drives clicks.</small>
+    </div>
+    <div class="field">
       <label>Category (optional)</label>
       <input type="text" name="category" value="{{ product.category if product else '' }}" list="category-suggestions" placeholder="e.g. eBooks, Templates, Courses">
       <small>Used to create filter tabs on your homepage. Leave blank if you don't want to categorize it.</small>

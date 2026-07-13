@@ -59,10 +59,18 @@
 
     <div class="product-info reveal" style="--i: 1;">
       <span class="eyebrow">{{ product.category or settings.site_name }}</span>
+      {% if product.ribbon %}<span class="product-ribbon product-ribbon--{{ product.ribbon|lower }}">{{ product.ribbon }}</span>{% endif %}
       <h1>{{ product.name }}</h1>
       <div class="product-price">
-        <span id="priceOriginal">{{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}</span>
-        <span id="priceDiscounted" style="display:none;"></span>
+        {% if product.compare_price and product.compare_price > product.price %}
+          <span class="product-price__compare">{{ settings.currency_symbol }}{{ "{:,}".format(product.compare_price) }}</span>
+          <span id="priceOriginal" class="product-price__current">{{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}</span>
+          <span id="priceDiscounted" class="product-price__discounted" style="display:none;"></span>
+          <span class="product-price__save">Save {{ settings.currency_symbol }}{{ "{:,}".format(product.compare_price - product.price) }} ({{ ((product.compare_price - product.price) / product.compare_price * 100)|round(0)|int }}%)</span>
+        {% else %}
+          <span id="priceOriginal">{{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}</span>
+          <span id="priceDiscounted" style="display:none;"></span>
+        {% endif %}
       </div>
       <p>{{ product.short_description }}</p>
       <div class="divider"></div>
@@ -143,6 +151,7 @@
       <div class="card">
         <a class="card__link" href="{{ url_for('product_detail', slug=r.slug) }}">
           <div class="card__image">
+            {% if r.ribbon %}<span class="card__ribbon card__ribbon--{{ r.ribbon|lower }}">{{ r.ribbon }}</span>{% endif %}
             {% if related_images[r.id] %}
               <img src="{{ url_for('static', filename='uploads/' ~ related_images[r.id]) }}" alt="{{ r.name }}" loading="lazy" width="400" height="500">
             {% else %}
@@ -151,7 +160,15 @@
           </div>
           {% if r.category %}<div class="card__category">{{ r.category }}</div>{% endif %}
           <div class="card__title">{{ r.name }}</div>
-          <div class="card__price">{{ settings.currency_symbol }}{{ "{:,}".format(r.price) }}</div>
+          <div class="card__price">
+            {% if r.compare_price and r.compare_price > r.price %}
+              <span class="card__price-old">{{ settings.currency_symbol }}{{ "{:,}".format(r.compare_price) }}</span>
+              <span class="card__price-new">{{ settings.currency_symbol }}{{ "{:,}".format(r.price) }}</span>
+              <span class="card__price-save">Save {{ settings.currency_symbol }}{{ "{:,}".format(r.compare_price - r.price) }}</span>
+            {% else %}
+              {{ settings.currency_symbol }}{{ "{:,}".format(r.price) }}
+            {% endif %}
+          </div>
         </a>
         <form class="add-to-cart-form card__add-form" action="{{ url_for('cart_add') }}" method="POST">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -167,7 +184,14 @@
 </section>
 
 <div class="mobile-buy-bar">
-  <span class="mobile-buy-bar__price">{{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}</span>
+  <span class="mobile-buy-bar__price">
+    {% if product.compare_price and product.compare_price > product.price %}
+      <span style="text-decoration:line-through; opacity:0.5; font-size:0.85em;">{{ settings.currency_symbol }}{{ "{:,}".format(product.compare_price) }}</span>
+      <span>{{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}</span>
+    {% else %}
+      {{ settings.currency_symbol }}{{ "{:,}".format(product.price) }}
+    {% endif %}
+  </span>
   <button class="btn" onclick="document.getElementById('buyerName').scrollIntoView({behavior:'smooth', block:'center'}); document.getElementById('buyerName').focus();">Buy Now</button>
 </div>
 

@@ -35,7 +35,11 @@ CREATE TABLE IF NOT EXISTS products (
     category          TEXT NOT NULL DEFAULT '',
     active            INTEGER NOT NULL DEFAULT 1,
     position          INTEGER NOT NULL DEFAULT 0,
-    created_at        TEXT NOT NULL
+    created_at        TEXT NOT NULL,
+    delivery_mode     TEXT NOT NULL DEFAULT 'manual',
+    auto_delivery_content TEXT NOT NULL DEFAULT '',
+    ribbon            TEXT NOT NULL DEFAULT '',
+    compare_price     INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS product_images (
@@ -177,6 +181,11 @@ MIGRATIONS = [
     "ALTER TABLE coupons ADD COLUMN customer_segment TEXT NOT NULL DEFAULT 'all'",
     "ALTER TABLE coupons ADD COLUMN starts_at TEXT",
     "ALTER TABLE coupons ADD COLUMN expires_at TEXT",
+    # ---- Product ribbons + strike-through pricing ----
+    # ribbon: optional label shown on product card (e.g. 'Sale', 'Bestseller', 'New', 'Hot')
+    "ALTER TABLE products ADD COLUMN ribbon TEXT NOT NULL DEFAULT ''",
+    # compare_price: original price shown struck-through next to the selling price
+    "ALTER TABLE products ADD COLUMN compare_price INTEGER",
 ]
 
 DEFAULT_SETTINGS = {

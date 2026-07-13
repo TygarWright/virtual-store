@@ -1549,6 +1549,19 @@ def _save_product(product_id):
     if delivery_mode not in ("manual", "automatic"):
         delivery_mode = "manual"
     auto_delivery_content = request.form.get("auto_delivery_content", "").strip()
+    ribbon = request.form.get("ribbon", "").strip()
+    compare_price_raw = request.form.get("compare_price", "").strip()
+
+    # Validate compare_price
+    compare_price = None
+    if compare_price_raw:
+        try:
+            compare_price = int(float(compare_price_raw))
+            if compare_price < 0:
+                raise ValueError
+        except ValueError:
+            flash("Please enter a valid compare-at price.", "error")
+            return redirect(request.referrer or url_for("admin_products"))
 
     if not name:
         flash("Please give the product a name.", "error")
@@ -1565,9 +1578,10 @@ def _save_product(product_id):
     if product_id:
         conn.execute(
             """UPDATE products SET name=?, short_description=?, description=?,
-               price=?, category=?, active=?, delivery_mode=?, auto_delivery_content=? WHERE id=?""",
+               price=?, category=?, active=?, delivery_mode=?, auto_delivery_content=?,
+               ribbon=?, compare_price=? WHERE id=?""",
             (name, short_description, description, price, category, active,
-             delivery_mode, auto_delivery_content, product_id),
+             delivery_mode, auto_delivery_content, ribbon, compare_price, product_id),
         )
         # Update slug if the name changed (keep it in sync)
         new_slug_base = slugify(name)
@@ -1593,10 +1607,11 @@ def _save_product(product_id):
         max_pos = conn.execute("SELECT COALESCE(MAX(position), -1) m FROM products").fetchone()["m"]
         cur = conn.execute(
             """INSERT INTO products (name, slug, short_description, description, price,
-               category, active, position, created_at, delivery_mode, auto_delivery_content)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               category, active, position, created_at, delivery_mode, auto_delivery_content,
+               ribbon, compare_price)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (name, slug, short_description, description, price, category, active, max_pos + 1, db.now(),
-             delivery_mode, auto_delivery_content),
+             delivery_mode, auto_delivery_content, ribbon, compare_price),
         )
         product_id = cur.lastrowid
 

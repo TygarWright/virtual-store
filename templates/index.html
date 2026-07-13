@@ -106,7 +106,8 @@
       <div class="card reveal" style="--i: {{ loop.index0 }};">
         <a class="card__link" href="{{ url_for('product_detail', slug=p.slug) }}">
           <div class="card__image">
-            {% if p.id in new_product_ids %}<span class="card__badge">New</span>{% endif %}
+            {% if p.ribbon %}<span class="card__ribbon card__ribbon--{{ p.ribbon|lower }}">{{ p.ribbon }}</span>{% endif %}
+            {% if p.id in new_product_ids and not p.ribbon %}<span class="card__badge">New</span>{% endif %}
             {% if product_images[p.id] %}
               <img src="{{ url_for('static', filename='uploads/' ~ product_images[p.id]) }}" alt="{{ p.name }}" loading="lazy" width="400" height="500">
             {% else %}
@@ -115,7 +116,15 @@
           </div>
           {% if p.category %}<div class="card__category">{{ p.category }}</div>{% endif %}
           <div class="card__title">{{ p.name }}</div>
-          <div class="card__price">{{ settings.currency_symbol }}{{ "{:,}".format(p.price) }}</div>
+          <div class="card__price">
+            {% if p.compare_price and p.compare_price > p.price %}
+              <span class="card__price-old">{{ settings.currency_symbol }}{{ "{:,}".format(p.compare_price) }}</span>
+              <span class="card__price-new">{{ settings.currency_symbol }}{{ "{:,}".format(p.price) }}</span>
+              <span class="card__price-save">Save {{ settings.currency_symbol }}{{ "{:,}".format(p.compare_price - p.price) }}</span>
+            {% else %}
+              {{ settings.currency_symbol }}{{ "{:,}".format(p.price) }}
+            {% endif %}
+          </div>
         </a>
         <form class="add-to-cart-form card__add-form" action="{{ url_for('cart_add') }}" method="POST">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
