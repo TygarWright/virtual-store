@@ -344,10 +344,7 @@ def create_app():
 
       # Initialize shared rate limiting with conservative global defaults.
       # Sensitive endpoints below receive explicit route-level limits.
-      limiter.init_app(
-          app,
-          storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
-      )
+      limiter.init_app(app)
       app.limiter = limiter
 
       # Initialize shared CSRF protection if enabled. Bearer-token API routes

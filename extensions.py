@@ -3,6 +3,8 @@
 All framework extensions live here so blueprints can import the shared
 instances without creating circular imports or duplicate extension state.
 """
+import os
+
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_limiter import Limiter
@@ -14,5 +16,6 @@ migrate = Migrate()
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["200 per day", "50 per hour"],
+    storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
 )
 csrf = CSRFProtect()
