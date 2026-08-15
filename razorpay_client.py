@@ -8,10 +8,23 @@ import hmac
 import hashlib
 import os
 import requests
+from utils.resilience import CircuitBreaker, ResilientProviderCall
 
 import config
 
 API_BASE = "https://api.razorpay.com/v1"
+_RZP_BREAKER = CircuitBreaker("razorpay", failure_threshold=5, recovery_seconds=30)
+_RZP_SAFE_GET = ResilientProviderCall(_RZP_BREAKER, retries=2, retry_if=lambda exc: _retryable_request_error(exc))
+
+
+def _retryable_request_error(exc):
+    if isinstance(exc, requests.exceptions.Timeout):
+        return True
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        return True
+    if isinstance(exc, requests.exceptions.HTTPError) and exc.response is not None:
+        return exc.response.status_code == 429 or exc.response.status_code >= 500
+    return False
 
 
 def _auth():
@@ -81,13 +94,15 @@ def fetch_order_payments(order_id):
     Used by the reconciliation cron to detect payments that succeeded on
     Razorpay's side but were not recorded locally (e.g. webhook missed).
     """
-    resp = requests.get(
-        f"{API_BASE}/orders/{order_id}/payments",
-        auth=_auth(),
-        timeout=15,
-    )
-    resp.raise_for_status()
-    data = resp.json()
+    def _request():
+        resp = requests.get(
+            f"{API_BASE}/orders/{order_id}/payments",
+            auth=_auth(),
+            timeout=(3.05, 12),
+        )
+        resp.raise_for_status()
+        return resp
+    data = _RZP_SAFE_GET(_request).json()
     return data.get("items", [])
 
 
@@ -112,6 +127,12 @@ def verify_webhook_signature(webhook_body, webhook_signature):
 def fetch_payment_refunds(payment_id):
     if not payment_id:
         return []
-    resp = requests.get(f"{API_BASE}/payments/{payment_id}/refunds", auth=_auth(), timeout=15)
-    resp.raise_for_status()
-    return resp.json().get("items", [])
+    def _request():
+        resp = requests.get(
+            f"{API_BASE}/payments/{payment_id}/refunds",
+            auth=_auth(),
+            timeout=(3.05, 12),
+        )
+        resp.raise_for_status()
+        return resp
+    return _RZP_SAFE_GET(_request).json().get("items", [])

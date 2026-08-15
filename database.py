@@ -3,6 +3,30 @@ Very small data layer on top of sqlite3 (built into Python — no ORM,
 no extra dependency, easy to back up: it's a single .db file).
 
 -- Performance monitoring tables
+CREATE TABLE IF NOT EXISTS domain_events (
+    event_id TEXT PRIMARY KEY,
+    topic TEXT NOT NULL,
+    aggregate TEXT NOT NULL,
+    aggregate_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_domain_events_topic_created ON domain_events(topic, created_at);
+
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    namespace TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    request_hash TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'processing',
+    result_json TEXT NOT NULL DEFAULT '{}',
+    expires_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(namespace, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_idempotency_expiry ON idempotency_keys(expires_at);
+
 CREATE TABLE IF NOT EXISTS analytics_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_type TEXT NOT NULL,
@@ -647,7 +671,8 @@ SCHEMA_EXTRA = """
       action     TEXT NOT NULL,
       target     TEXT NOT NULL DEFAULT '',
       details    TEXT NOT NULL DEFAULT '',
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      integrity_hash TEXT NOT NULL DEFAULT ''
   );
   CREATE INDEX IF NOT EXISTS idx_admin_audit_admin ON admin_audit_log(admin_id);
   CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_log(created_at);
@@ -842,10 +867,26 @@ def _record_migration(conn, migration_id):
     )
 
 
+def _ensure_backend_kernel_schema(conn):
+    """Schema-aware repair for TITAN backend-kernel tables.
+
+    This deliberately checks actual SQLite/Turso schema instead of trusting the
+    migration ledger, preventing long-lived deployments from getting stuck when
+    an earlier migration was marked applied before the DDL persisted.
+    """
+    conn.execute("CREATE TABLE IF NOT EXISTS domain_events (event_id TEXT PRIMARY KEY, topic TEXT NOT NULL, aggregate TEXT NOT NULL, aggregate_id TEXT NOT NULL, payload_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_domain_events_topic_created ON domain_events(topic, created_at)")
+    conn.execute("CREATE TABLE IF NOT EXISTS idempotency_keys (id INTEGER PRIMARY KEY AUTOINCREMENT, namespace TEXT NOT NULL, idempotency_key TEXT NOT NULL, request_hash TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'processing', result_json TEXT NOT NULL DEFAULT '{}', expires_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(namespace,idempotency_key))")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_idempotency_expiry ON idempotency_keys(expires_at)")
+    conn.commit()
+
+
 def _ensure_business_exception_columns(conn):
-    """Repair additive governance columns even if a prior migration was recorded
-    before the DDL actually became durable. This is intentionally schema-aware
-    rather than migration-led so long-lived deployments can self-heal safely.
+    """Repair Guardian's additive exception columns against the *actual* live schema.
+
+    Some long-lived Turso/libSQL databases can have migration bookkeeping ahead
+    of physical DDL. PRAGMA visibility is not treated as authoritative here;
+    each required column is probed directly and added when missing.
     """
     required = {
         "assigned_to": "INTEGER REFERENCES admin_users(id)",
@@ -853,18 +894,31 @@ def _ensure_business_exception_columns(conn):
         "escalated_at": "TEXT",
         "escalation_reason": "TEXT NOT NULL DEFAULT ''",
     }
-    rows = conn.execute("PRAGMA table_info(business_exceptions)").fetchall()
-    existing = {str(r[1]) for r in rows}
     for name, definition in required.items():
-        if name in existing:
+        try:
+            conn.execute(f"SELECT {name} FROM business_exceptions LIMIT 0")
             continue
+        except (sqlite3.OperationalError, ValueError) as exc:
+            message = str(exc).lower()
+            if "no such column" not in message and "unknown column" not in message:
+                raise
         try:
             conn.execute(f"ALTER TABLE business_exceptions ADD COLUMN {name} {definition}")
-        except sqlite3.OperationalError as exc:
+            _db_logger.info("Schema repair applied: business_exceptions.%s", name)
+        except (sqlite3.OperationalError, ValueError) as exc:
             message = str(exc).lower()
-            if "duplicate column" not in message and "already exists" not in message:
+            if not any(token in message for token in ("duplicate column", "already exists", "duplicate")):
                 raise
+    # Verify all columns after the repair. This makes a false-green migration
+    # impossible: Guardian will not proceed while the live schema is incomplete.
+    for name in required:
+        conn.execute(f"SELECT {name} FROM business_exceptions LIMIT 0")
     conn.commit()
+
+
+def ensure_business_exception_columns(conn):
+    """Public idempotent Guardian schema guard."""
+    _ensure_business_exception_columns(conn)
 
 
 def _apply_migrations(conn):
@@ -911,7 +965,27 @@ def _apply_migrations(conn):
     # Repair the governance table from actual schema state, not migration history.
     # This protects long-lived deployments where an earlier migration was marked
     # applied even though the DDL did not persist.
+    _ensure_backend_kernel_schema(conn)
     _ensure_business_exception_columns(conn)
+    try:
+        try:
+            conn.execute("SELECT integrity_hash FROM admin_audit_log LIMIT 0")
+        except (sqlite3.OperationalError, ValueError) as exc:
+            message = str(exc).lower()
+            if "no such column" in message or "unknown column" in message:
+                conn.execute("ALTER TABLE admin_audit_log ADD COLUMN integrity_hash TEXT NOT NULL DEFAULT ''")
+                conn.commit()
+            else:
+                raise
+    except Exception:
+        raise
+    try:
+        from schema_contract import repair_missing_columns
+        repaired = repair_missing_columns(conn)
+        if repaired:
+            _db_logger.warning("Schema contract repaired %d additive column(s)", len(repaired))
+    except ImportError:
+        raise
 
 
 DEFAULT_SETTINGS = {

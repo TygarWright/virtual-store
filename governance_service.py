@@ -281,8 +281,30 @@ def append_audit_hash(conn, *, audit_id: int, admin_id: int, action: str, target
     previous = audit_hash_chain_head(conn)
     payload = f"{previous}|{audit_id}|{admin_id}|{action}|{target}|{details}|{created_at}".encode()
     digest = hashlib.sha256(payload).hexdigest()
+    conn.execute("UPDATE admin_audit_log SET integrity_hash=? WHERE id=?", (digest, audit_id))
     conn.execute("UPDATE audit_integrity SET last_hash=? WHERE id=1", (digest,))
     return digest
+
+
+def verify_audit_integrity(conn) -> dict:
+    """Verify the persisted audit hash chain without modifying it."""
+    import hashlib
+    rows = conn.execute(
+        "SELECT id, admin_id, action, target, details, created_at, integrity_hash "
+        "FROM admin_audit_log ORDER BY id"
+    ).fetchall()
+    previous = ""
+    checked = 0
+    for row in rows:
+        payload = f"{previous}|{row['id']}|{row['admin_id']}|{row['action']}|{row['target']}|{row['details']}|{row['created_at']}".encode()
+        expected = hashlib.sha256(payload).hexdigest()
+        actual = str(row['integrity_hash'] or '')
+        if actual and actual != expected:
+            return {"ok": False, "checked": checked, "bad_id": int(row['id']), "expected": expected, "actual": actual}
+        previous = actual or expected
+        checked += 1
+    head = audit_hash_chain_head(conn)
+    return {"ok": (not head or head == previous), "checked": checked, "head": head, "calculated_head": previous}
 
 
 def log_support_interaction(conn, *, customer_id: int, admin_id: int, channel: str,

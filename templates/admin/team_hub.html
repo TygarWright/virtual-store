@@ -3,11 +3,12 @@
 {% block title %}Team Hub{% endblock %}
 {% block content %}
 <div class="admin-page-header"><div><h1>Team Hub</h1><p class="text-muted">Talk directly. No ticket required.</p></div></div>
-<div style="display:grid;grid-template-columns:280px 1fr;gap:1rem;min-height:520px">
-  <div class="admin-card">
-    <h3>Conversations</h3>
+<div class="team-hub-shell">
+  <div class="team-hub-layout">
+  <div class="admin-card team-hub-sidebar">
+    <h3 class="team-hub-title">Conversations</h3>
     {% for c in conversations %}
-      <a href="{{ url_for('admin.admin_team_hub', conversation=c.id) }}" style="display:block;padding:.75rem;border-radius:10px;{% if c.id==selected.id %}background:var(--bg-secondary);{% endif %}">
+      <a class="team-hub-conversation{% if c.id==selected.id %} team-hub-conversation--active{% endif %}" href="{{ url_for('admin.admin_team_hub', conversation=c.id) }}">
         <strong>{% if c.kind=='global' %}{{ icon('globe') }}{% elif c.kind=='direct' %}{{ icon('user') }}{% else %}{{ icon('users') }}{% endif %} {{ c.title if c.title else c.target_username }}</strong>
         {% if c.unread_count %}<span class="admin-nav__badge">{{ c.unread_count }}</span>{% endif %}
       </a>
@@ -21,12 +22,12 @@
       <button class="admin-btn admin-btn--primary" type="submit">Send</button>
     </form>
   </div>
-  <div class="admin-card" style="display:flex;flex-direction:column">
+  <div class="admin-card team-hub-main">
     <h3>{{ selected.title or selected.target_username or 'Conversation' }}</h3>
-    <div id="teamMessages" style="flex:1;overflow:auto;padding:.5rem 0">
-      {% for m in messages %}<div style="padding:.6rem 0;border-bottom:1px solid var(--border-color,#ddd)"><strong>{{ m.sender_name }}</strong><small class="text-muted"> · {{ m.created_at[:16].replace('T',' ') }}</small><div>{{ m.body }}</div></div>{% endfor %}
+    <div id="teamMessages" class="team-hub-messages">
+      {% for m in messages %}<div class="team-hub-message"><strong>{{ m.sender_name }}</strong><small class="text-muted"> · {{ m.created_at[:16].replace('T',' ') }}</small><div>{{ m.body }}</div></div>{% endfor %}
     </div>
-    <form method="POST" action="{{ url_for('admin.admin_team_hub') }}?conversation={{ selected.id }}" style="display:flex;gap:.5rem"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="conversation_id" value="{{ selected.id }}"><input type="hidden" name="kind" value="global"><input class="form-input" name="body" placeholder="Write a message…" required style="flex:1"><button class="admin-btn admin-btn--primary">Send</button></form>
+    <form method="POST" action="{{ url_for('admin.admin_team_hub') }}?conversation={{ selected.id }}" class="team-hub-compose"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="conversation_id" value="{{ selected.id }}"><input type="hidden" name="kind" value="global"><input class="form-input team-hub-compose__input" name="body" placeholder="Write a message…" required><button class="admin-btn admin-btn--primary">Send</button></form>
   </div>
-</div>
+</div></div>
 {% endblock %}

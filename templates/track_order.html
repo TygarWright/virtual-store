@@ -95,9 +95,9 @@
         {% set is_terminal = current_step < 0 %}
 
         {% set steps = [
-          {'label': 'Order Placed',   'key': 'created',    'icon': '🛒'},
+          {'label': 'Order Placed',   'key': 'created',    'icon': 'package'},
           {'label': 'Payment Confirmed', 'key': 'paid',     'icon': '✓'},
-          {'label': 'Processing',     'key': 'processing', 'icon': '⚙'},
+          {'label': 'Processing',     'key': 'processing', 'icon': 'loader'},
           {'label': 'Completed',      'key': 'delivered',  'icon': '🏁'},
         ] %}
 
@@ -132,7 +132,8 @@
         {% else %}
           {# ── Normal flow stepper ── #}
           <div class="track-stepper">
-            {% for step in steps %}
+            {% set icon_map = {'package': '<svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M21 8l-9-5-9 5 9 5 9-5Z\"/><path d=\"M3 8v8l9 5 9-5V8\"/><path d=\"M12 13v8\"/></svg>', 'loader': '<svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M12 3a9 9 0 1 1-9 9\"/><path d=\"M12 3v5l4 2\"/></svg>'} %}
+{% for step in steps %}
             {% set step_idx = loop.index0 %}
             {% set is_done = step_idx < current_step %}
             {% set is_active = step_idx == current_step %}

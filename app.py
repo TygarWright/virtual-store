@@ -440,6 +440,16 @@ def create_app():
           return dict(cart_count=cart_count)
 
       @app.context_processor
+      def inject_static_version():
+          try:
+              stamp_path = os.path.join(app.root_path, "deploy_stamp.txt")
+              with open(stamp_path, "r", encoding="utf-8") as handle:
+                  version = handle.read().strip()
+          except OSError:
+              version = "dev"
+          return dict(static_version=version or "dev")
+
+      @app.context_processor
       def inject_site_settings():
           """Make site settings available to every template, including admin pages."""
           try:
@@ -470,7 +480,16 @@ def create_app():
               conn = db.get_db(); notices = [dict(n) for n in active_notices(conn)]; conn.close()
           except Exception:
               notices=[]
-          return dict(admin_nav_active=admin_nav_active, storefront_notices=notices)
+          section_labels = {
+              "dashboard":"Overview", "orders":"Orders", "intelligence":"Intelligence", "customers":"Customers",
+              "products":"Products", "homepage":"Homepage", "coupons":"Coupons", "content":"Content",
+              "newsletter":"Newsletter", "settings":"Settings", "audit":"Audit Log", "inventory":"Inventory",
+              "tickets":"Tickets", "team":"Team", "team_hub":"Team Hub", "notices":"Site Notices",
+              "guardian":"Guardian", "simulation":"Simulation Lab", "training":"Training Mode", "account":"My Account",
+          }
+          current_section = next((name for name in section_labels if admin_nav_active(name)), "")
+          return dict(admin_nav_active=admin_nav_active, admin_current_section=current_section,
+                      admin_current_section_label=section_labels.get(current_section, ""), storefront_notices=notices)
 
       @app.context_processor
       def inject_admin_permissions():

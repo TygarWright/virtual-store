@@ -9,14 +9,16 @@
 <title>{% block title %}Admin{% endblock %} — {{ settings.site_name }}</title>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/titan-ui.css') }}?v={{ static_version }}">
 </head>
-<body>
+<body class="titan-admin">
 <div class="admin-shell">
   <aside class="admin-sidebar" id="adminSidebar">
     <div class="admin-sidebar__header">
       <a href="{{ url_for('admin.admin_dashboard') }}" class="admin-sidebar__brand">{{ settings.site_name }}</a>
     </div>
     <nav class="admin-nav">
+      <div class="admin-nav__section">Overview</div>
       <a href="{{ url_for('admin.admin_dashboard') }}" class="{{ 'active' if admin_nav_active('dashboard') }}" onclick="closeAdminMenu()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
         Dashboard
@@ -28,6 +30,7 @@
         {% if pending_count is defined and pending_count > 0 %}<span class="admin-nav__badge">{{ pending_count }}</span>{% endif %}
       </a>
       {% endif %}
+      <div class="admin-nav__section">Commerce</div>
       {% if admin_can('orders.view') %}
       <a href="{{ url_for('admin.admin_insights') }}" class="{{ 'active' if admin_nav_active('intelligence') }}" onclick="closeAdminMenu()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5"></path><path d="M4 19h16"></path><path d="M8 16v-3"></path><path d="M12 16V8"></path><path d="M16 16V4"></path></svg>
@@ -60,6 +63,7 @@
         Coupon Usage
       </a>
       {% endif %}
+      <div class="admin-nav__section">Content</div>
       {% if admin_can('content.manage') %}
       <a href="{{ url_for('admin.admin_testimonials') }}" class="{{ 'active' if admin_nav_active('content') }}" onclick="closeAdminMenu()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7.4-6.3-4.6L5.7 21.4 8 14 2 9.4h7.6z"></path></svg>
@@ -70,12 +74,14 @@
         FAQs
       </a>
       {% endif %}
+      <div class="admin-nav__section">Operations</div>
       {% if admin_can('newsletter.view') or admin_can('marketing.manage') %}
       <a href="{{ url_for('admin.admin_newsletter') }}" class="{{ 'active' if admin_nav_active('newsletter') }}" onclick="closeAdminMenu()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
         Newsletter
       </a>
       {% endif %}
+      <div class="admin-nav__section">System</div>
       {% if admin_can('settings.manage') %}
       <a href="{{ url_for('admin.admin_settings') }}" class="{{ 'active' if admin_nav_active('settings') }}" onclick="closeAdminMenu()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
@@ -136,7 +142,30 @@
       </form>
     </nav>
   </aside>
-  <main class="admin-main">
+  <div class="admin-command-palette" id="adminCommandPalette" hidden aria-hidden="true">
+  <div class="admin-command-palette__backdrop" data-command-close></div>
+  <section class="admin-command-palette__panel" role="dialog" aria-modal="true" aria-labelledby="adminCommandTitle">
+    <div class="admin-command-palette__head">
+      <div>
+        <div class="admin-command-palette__eyebrow">Quick navigation</div>
+        <h2 id="adminCommandTitle">Go to…</h2>
+      </div>
+      <button class="admin-command-palette__close" type="button" data-command-close aria-label="Close">&times;</button>
+    </div>
+    <input id="adminCommandInput" class="admin-input admin-command-palette__input" type="search" placeholder="Search modules…" autocomplete="off">
+    <div class="admin-command-palette__list" id="adminCommandList" role="listbox"></div>
+    <div class="admin-command-palette__foot"><span>Enter</span> open <span>Esc</span> close <span>Ctrl K</span> focus</div>
+  </section>
+</div>
+
+<main class="admin-main">
+    {% if admin_current_section_label %}
+    <div class="admin-context" aria-label="Current module">
+      <span class="admin-context__eyebrow">Workspace</span>
+      <span class="admin-context__divider" aria-hidden="true"></span>
+      <strong>{{ admin_current_section_label }}</strong>
+    </div>
+    {% endif %}
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, message in messages %}
@@ -260,5 +289,43 @@ function toggleAdminMenu() {
 })();
 </script>
 {% block extra_js %}{% endblock %}
+
+<script nonce="{{ csp_nonce }}">
+(function(){
+  const palette=document.getElementById('adminCommandPalette');
+  const input=document.getElementById('adminCommandInput');
+  const list=document.getElementById('adminCommandList');
+  if(!palette||!input||!list) return;
+  const items=[
+    ['Dashboard','admin.admin_dashboard','dashboard'],
+    ['Orders','admin.admin_orders','orders'],
+    ['Products','admin.admin_products','products'],
+    ['Customers','admin.admin_customers','customers'],
+    ['Guardian','admin.admin_guardian','guardian'],
+    ['Simulation Lab','admin.admin_simulation_lab','simulation'],
+    ['Training Mode','admin.admin_training','training'],
+    ['Team Hub','admin.admin_team_hub','team_hub'],
+    ['Team','admin.admin_team','team'],
+    ['Tickets','admin.admin_tickets','tickets'],
+    ['Site Notices','admin.admin_notices','notices'],
+    ['Settings','admin.admin_settings','settings'],
+    ['Audit Log','admin.admin_audit_log','audit']
+  ].map(([label, endpoint, section]) => ({label, endpoint, section, href: null}));
+  // Use already-rendered nav links as authoritative destinations and permissions.
+  items.forEach(item=>{ const a=document.querySelector('.admin-nav a[href*="/'+item.section]') || Array.from(document.querySelectorAll('.admin-nav a')).find(x=>x.textContent.trim()===item.label); if(a) item.href=a.getAttribute('href'); });
+  function render(q){
+    const needle=q.trim().toLowerCase(); list.innerHTML='';
+    items.filter(x=>x.href && (!needle || x.label.toLowerCase().includes(needle))).forEach((x,i)=>{
+      const a=document.createElement('a'); a.href=x.href; a.className='admin-command-palette__item'; a.setAttribute('role','option'); a.dataset.index=i; a.innerHTML='<span>'+x.label+'</span><kbd>↵</kbd>'; list.appendChild(a);
+    });
+  }
+  function close(){palette.hidden=true; palette.setAttribute('aria-hidden','true'); document.body.classList.remove('admin-command-open');}
+  function open(){palette.hidden=false; palette.setAttribute('aria-hidden','false'); document.body.classList.add('admin-command-open'); render(''); setTimeout(()=>input.focus(),30);}
+  document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();open();} if(e.key==='Escape'&&!palette.hidden) close(); if(e.key==='Enter'&&!palette.hidden){const first=list.querySelector('a'); if(first){e.preventDefault(); window.location.href=first.href;}} });
+  input.addEventListener('input',()=>render(input.value));
+  palette.querySelectorAll('[data-command-close]').forEach(x=>x.addEventListener('click',close));
+  window.__openAdminCommandPalette=open;
+})();
+</script>
 </body>
 </html>

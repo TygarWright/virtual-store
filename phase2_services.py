@@ -113,6 +113,14 @@ def mark_payment_captured(conn, order_id, *, provider="razorpay", provider_order
     if not transition_payment_state(conn, order_id, "captured", expected_states={"pending"}):
         return False
     transition_order_state(conn, order_id, "paid", expected_states={"created"})
+    try:
+        from backend_kernel import publish_event
+        publish_event(conn, topic="payment.captured", aggregate="order", aggregate_id=order_id,
+                      payload={"order_id": order_id, "provider": provider, "provider_order_id": provider_order_id,
+                               "provider_payment_id": provider_payment_id, "amount": amount, "currency": currency})
+    except Exception:
+        # Domain state must never fail merely because an optional event sink is unavailable.
+        pass
     return True
 
 

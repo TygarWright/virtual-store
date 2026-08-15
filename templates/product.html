@@ -148,7 +148,7 @@
       <div class="stock-request-box">
         <p><strong>Notify me when back in stock</strong></p>
         <div style="display:flex;gap:0.5rem;">
-          <button class="btn btn--outline btn--sm" onclick="requestStockNotify({{ product.id }})" id="stockNotifyBtn" data-email="{{ current_customer_email }}"><span class="bell-ring">🔔</span> Notify Me</button>
+          <button class="btn btn--outline btn--sm" onclick="requestStockNotify({{ product.id }})" id="stockNotifyBtn" data-email="{{ current_customer_email }}"><svg class="icon icon--sm" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg> Notify Me</button>
         </div>
         <p id="stockNotifyMsg" class="stock-request-box__msg"></p>
       </div>
@@ -158,7 +158,7 @@
         <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
           <input type="email" id="stockNotifyEmail" placeholder="Your email">
           <input type="text" id="stockNotifyName" placeholder="Your name (optional)">
-          <button class="btn btn--outline btn--sm" onclick="requestStockNotify({{ product.id }})"><span class="bell-ring">🔔</span> Notify Me</button>
+          <button class="btn btn--outline btn--sm" onclick="requestStockNotify({{ product.id }})"><svg class="icon icon--sm" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg> Notify Me</button>
         </div>
         <p id="stockNotifyMsgGuest" class="stock-request-box__msg"></p>
       </div>
@@ -571,13 +571,13 @@ function requestStockNotify(productId) {
       msgEl.textContent = data.error;
       msgEl.style.display = 'block'; msgEl.style.color = '#cc5555';
       document.getElementById('stockNotifyBtn').disabled = false;
-      document.getElementById('stockNotifyBtn').textContent = '🔔 Notify Me';
+      document.getElementById('stockNotifyBtn').textContent = 'Notify Me';
     }
   }).catch(function() {
     msgEl.textContent = 'Something went wrong. Please try again.';
     msgEl.style.display = 'block'; msgEl.style.color = '#cc5555';
     document.getElementById('stockNotifyBtn').disabled = false;
-    document.getElementById('stockNotifyBtn').textContent = '🔔 Notify Me';
+    document.getElementById('stockNotifyBtn').textContent = 'Notify Me';
   });
 }
 

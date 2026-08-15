@@ -171,7 +171,7 @@
               onsubmit="return confirm('Remove this image?');">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="product_id" value="{{ product.id }}">
-          <button class="del-btn" type="submit">✕</button>
+          <button class="del-btn" type="submit" aria-label="Delete" title="Delete">{{ icon("x", 14) }}</button>
         </form>
       </div>
       {% endfor %}

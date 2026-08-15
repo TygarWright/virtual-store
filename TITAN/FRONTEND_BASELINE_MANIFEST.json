@@ -1,0 +1,31 @@
+{
+  "source": "TYG4R/virtual-store public repository snapshot",
+  "exact_matches": [
+    "templates/cart.html",
+    "templates/order_status.html",
+    "templates/track_order.html",
+    "templates/account_hub.html",
+    "templates/account_library.html",
+    "templates/account_orders.html",
+    "templates/account_wishlist.html",
+    "templates/privacy_policy.html",
+    "templates/refund_policy.html",
+    "templates/terms_of_service.html",
+    "templates/unsubscribed.html",
+    "static/js/animations.js",
+    "static/js/cart.js",
+    "static/js/cart_checkout.js",
+    "static/js/checkout.js",
+    "static/js/countries.js",
+    "static/js/delivery.js",
+    "static/js/auto_coupons.js"
+  ],
+  "intentionally_changed": [
+    "templates/base.html",
+    "templates/index.html",
+    "templates/product.html",
+    "static/css/style.css",
+    "static/js/ui.js"
+  ],
+  "note": "Original CSS remains the baseline; TITAN Experience Layer is additive in static/css/titan-ui.css."
+}

@@ -112,9 +112,9 @@
       <small>
         {% if cal_api_key_set %}
           {% if cal_holiday_count > 0 %}
-            ✅ {{ cal_holiday_count }} holidays cached for {{ cal_last_fetch_year or '' }}.
+            {{ cal_holiday_count }} holidays cached for {{ cal_last_fetch_year or '' }}.
           {% else %}
-            ⏳ Calendarific API key is set. Save settings to fetch holidays.
+            Calendarific API key is set. Save settings to fetch holidays.
           {% endif %}
         {% else %}
           Set <code>CALENDARIFIC_API_KEY</code> env var to auto-fetch real holidays. Get a free key at <a href="https://calendarific.com/" target="_blank">calendarific.com</a>.
@@ -153,7 +153,7 @@
         <span style="opacity:0.4;">→</span>
         <input type="text" name="greeting_label[]" value="{{ g.label }}" placeholder="Label (e.g. Diwali)" style="flex:1; min-width:100px;">
         <input type="text" name="greeting_msg[]" value="{{ g.msg or '' }}" placeholder='Message (e.g. "Happy {label}, {name}! 🎉")' style="flex:2; min-width:160px;">
-        <button type="button" class="btn btn--sm btn--outline" onclick="this.parentElement.remove()" style="background:none;border:1px solid var(--grey-300);border-radius:6px;cursor:pointer;">✕</button>
+        <button type="button" class="btn btn--sm btn--outline" onclick="this.parentElement.remove()" style="background:none;border:1px solid var(--grey-300);border-radius:6px;cursor:pointer;" aria-label="Remove" title="Remove">{{ icon("x", 14) }}</button>
       </div>
       {% endfor %}
     </div>
@@ -214,7 +214,7 @@ function addGreetingRow() {
     '<span style="opacity:0.4;">→</span>' +
     '<input type="text" name="greeting_label[]" placeholder="Label (e.g. Diwali)" style="flex:1; min-width:100px;">' +
     '<input type="text" name="greeting_msg[]" placeholder=\'Message (e.g. "Happy {label}, {name}! 🎉")\' style="flex:2; min-width:160px;">' +
-    '<button type="button" onclick="this.parentElement.remove()" style="background:none;border:1px solid var(--grey-300);border-radius:6px;cursor:pointer;padding:2px 8px;">✕</button>';
+    '<button type="button" onclick="this.parentElement.remove()" style="background:none;border:1px solid var(--grey-300);border-radius:6px;cursor:pointer;padding:2px 8px;" aria-label="Remove" title="Remove">{{ icon("x", 14) }}</button>';
   d.appendChild(r);
 }
 </script>

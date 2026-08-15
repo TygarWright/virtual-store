@@ -26,3 +26,16 @@ def readyz():
         return jsonify({"status": "error"}), 503
     finally:
         conn.close()
+
+@health_bp.route('/healthz/backend', methods=['GET'])
+def backend_health():
+    """Safe backend diagnostics: no secrets, just capability/configuration state."""
+    import os
+    return jsonify({
+        "status": "ok",
+        "database": "configured" if (os.environ.get("TURSO_DB_URL") and os.environ.get("TURSO_DB_AUTH_TOKEN")) else "local-sqlite",
+        "redis": bool(os.environ.get("REDIS_URL")),
+        "razorpay": bool(os.environ.get("RAZORPAY_KEY_ID") and os.environ.get("RAZORPAY_KEY_SECRET")),
+        "sentry": bool(os.environ.get("SENTRY_DSN")),
+        "outbox": True,
+    }), 200

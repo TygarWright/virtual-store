@@ -177,3 +177,9 @@ somewhere safe. That's the entire business's data.
   can't fake a successful payment.
 - Change `SECRET_KEY` and the default admin password before going live.
 - Keep `.env` private — never share it or upload it anywhere public.
+
+## Pre-Render gate
+
+Before deployment, CI now runs `scripts/render_smoke.py` against Python 3.14 to match the current Render runtime. It initializes a fresh temporary SQLite database, verifies core public routes, renders and submits the admin login with a real Flask-WTF CSRF token, and then exercises the critical admin pages. It does not contact Razorpay or send external notifications.
+
+For deployed/local audit verification, run `scripts/verify_audit_integrity.py` with `DB_PATH` pointing at the target database. When no local database is present, the check exits cleanly with a SKIP rather than producing a misleading failure.

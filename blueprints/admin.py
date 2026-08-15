@@ -1298,8 +1298,8 @@ def admin_order_deliver(order_id):
                      f"Your order {order['order_ref']} is ready! Check your email for details.")
         except Exception:
             pass
-    flash("✅ Order delivered! Customer has been notified." if customer_email_notifications_enabled()
-          else "✅ Order marked as delivered. Share the details with the customer directly "
+    flash("Order delivered. Customer has been notified." if customer_email_notifications_enabled()
+          else "Order marked as delivered. Share the details with the customer directly "
                "(email sending isn't set up).", "success")
     return redirect(url_for("admin.admin_order_detail", order_id=order_id))
 
@@ -2584,6 +2584,7 @@ def admin_team_toggle(admin_id):
 def admin_guardian():
     from governance_service import run_guardian_scan
     conn = db.get_db()
+    db.ensure_business_exception_columns(conn)
     result = run_guardian_scan(conn)
     exceptions = conn.execute(
         """SELECT e.*, a.username AS assignee

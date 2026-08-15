@@ -6,7 +6,7 @@
 
 <div class="card-box" style="max-width:520px;">
   {% if totp_enabled and not show_recovery_codes %}
-    <h3>✅ Two-Factor Auth is Enabled</h3>
+    <h3>{{ icon("check", 18) }} Two-Factor Auth is Enabled</h3>
     <p>Your account is protected with time-based one-time passwords (TOTP).</p>
     <p style="font-size:0.85rem;color:var(--grey-500);">Use your authenticator app (Google Authenticator, Authy, 1Password, etc.) to generate a 6-digit code when logging in.</p>
     <form method="POST" onsubmit="return confirm('Disable two-factor authentication? This lowers your account security.');">
