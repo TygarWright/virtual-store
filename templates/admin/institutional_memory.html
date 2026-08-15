@@ -1,0 +1,25 @@
+{% from "admin/_icons.html" import icon %}
+{% extends "admin/base.html" %}
+{% block title %}Institutional Memory{% if selected_id %}
+<section class="admin-card" style="margin-top:16px">
+<h3>Decision history</h3>
+<div class="table-wrap"><table class="admin-table"><thead><tr><th>Date</th><th>Effectiveness</th><th>Score</th><th>Lesson</th><th>Recommendation</th></tr></thead><tbody>{% for h in selected_history %}<tr><td>{{ h.created_at }}</td><td>{{ h.effectiveness }}</td><td>{{ h.effectiveness_score if h.effectiveness_score is not none else '—' }}</td><td>{{ h.lesson }}</td><td>{{ h.future_recommendation }}</td></tr>{% else %}<tr><td colspan="5">No review history yet.</td></tr>{% endfor %}</tbody></table></div>
+<h3 style="margin-top:18px">Related knowledge</h3>
+<div class="table-wrap"><table class="admin-table"><thead><tr><th>Source</th><th>Title</th><th>Relevance</th></tr></thead><tbody>{% for r in selected_related %}<tr><td>{{ r.related_type }}</td><td>{{ r.title }}</td><td>{{ r.score if r.score is defined else r.relevance }}</td></tr>{% else %}<tr><td colspan="3">No related knowledge found.</td></tr>{% endfor %}</tbody></table></div>
+</section>
+{% endif %}
+{% endblock %}
+{% block content %}
+<div class="admin-page-header"><div><h1>Institutional Memory</h1><p class="text-muted">Search decisions, procedures, lessons and recommendations retained for the business.</p></div></div>
+<form method="GET" class="admin-toolbar" style="display:flex;gap:8px;flex-wrap:wrap"><input class="form-input" name="q" value="{{ q }}" placeholder="Search decisions, lessons, SOPs…"><select class="form-input" name="source_type"><option value="">All sources</option>{% for t in source_types %}<option value="{{ t }}" {% if source_type==t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select><button class="admin-btn" type="submit">Search memory</button></form>
+<div class="admin-card"><h3>Indexed memory</h3>{% for r in rows %}<article class="admin-list-row"><div><strong>{{ r.title }}</strong><div class="text-muted">{{ r.source_type }} · {{ r.updated_at[:16].replace('T',' ') }}</div><p>{{ r.body[:700] }}</p><div class="text-muted">Keywords: {{ r.keywords or '—' }}</div></div></article>{% else %}<p class="text-muted">No indexed institutional memory matches this query.</p>{% endfor %}</div>
+<div class="admin-card"><h3>Decision health</h3><p class="text-muted">{{ effectiveness.reviewed }} reviewed · {{ effectiveness.review_due_or_stale }} aging reviews · {{ effectiveness.effectiveness.effective }} effective · {{ effectiveness.effectiveness.mixed }} mixed · {{ effectiveness.effectiveness.ineffective }} ineffective</p></div><div class="admin-card"><h3>Review a decision</h3><p class="text-muted">Record what actually happened, what the business learned and what TITAN should recommend next time.</p><form method="POST" style="display:grid;gap:10px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><select class="form-input" name="decision_id" required><option value="">Choose decision…</option>{% for d in decisions %}<option value="{{ d.id }}">{{ d.title }}{% if d.outcome %} · reviewed{% endif %}</option>{% endfor %}</select><textarea class="form-input" name="outcome" rows="3" placeholder="What actually happened?"></textarea><textarea class="form-input" name="lesson" rows="3" placeholder="What should the business remember?"></textarea><textarea class="form-input" name="future_recommendation" rows="3" placeholder="What should TITAN recommend next time?"></textarea><select class="form-input" name="effectiveness"><option value="effective">Effective</option><option value="mixed">Mixed</option><option value="ineffective">Ineffective</option><option value="inconclusive">Inconclusive</option></select><input class="form-input" type="number" min="0" max="100" name="effectiveness_score" placeholder="Effectiveness score (0-100)"><button class="admin-btn admin-btn--primary" type="submit">Record review</button></form></div>
+{% if selected_id %}
+<section class="admin-card" style="margin-top:16px">
+<h3>Decision history</h3>
+<div class="table-wrap"><table class="admin-table"><thead><tr><th>Date</th><th>Effectiveness</th><th>Score</th><th>Lesson</th><th>Recommendation</th></tr></thead><tbody>{% for h in selected_history %}<tr><td>{{ h.created_at }}</td><td>{{ h.effectiveness }}</td><td>{{ h.effectiveness_score if h.effectiveness_score is not none else '—' }}</td><td>{{ h.lesson }}</td><td>{{ h.future_recommendation }}</td></tr>{% else %}<tr><td colspan="5">No review history yet.</td></tr>{% endfor %}</tbody></table></div>
+<h3 style="margin-top:18px">Related knowledge</h3>
+<div class="table-wrap"><table class="admin-table"><thead><tr><th>Source</th><th>Title</th><th>Relevance</th></tr></thead><tbody>{% for r in selected_related %}<tr><td>{{ r.related_type }}</td><td>{{ r.title }}</td><td>{{ r.score if r.score is defined else r.relevance }}</td></tr>{% else %}<tr><td colspan="3">No related knowledge found.</td></tr>{% endfor %}</tbody></table></div>
+</section>
+{% endif %}
+{% endblock %}

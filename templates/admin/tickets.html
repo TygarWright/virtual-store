@@ -48,7 +48,7 @@
           <td class="text-sm text-muted">{{ reply_count }}</td>
           {% if is_master %}
           <td>
-            <button class="btn btn--sm" onclick="event.stopPropagation(); toggleTicketDetails({{ ticket.id }})">
+            <a href="{{ url_for('admin.admin_team_hub_context', type='ticket', id=ticket.id, title='Ticket #'+ticket.id|string+': '+ticket.title) }}" class="btn btn--sm" onclick="event.stopPropagation();">Discuss</a> <button class="btn btn--sm" onclick="event.stopPropagation(); toggleTicketDetails({{ ticket.id }})">
               Manage
             </button>
           </td>

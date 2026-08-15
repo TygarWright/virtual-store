@@ -1,0 +1,22 @@
+{% extends "admin/base.html" %}
+{% block title %}SLOs{% endblock %}
+{% block content %}
+<div class="admin-page-header"><div><p class="admin-eyebrow">System</p><h1>Service health</h1><p>Operational objectives based on the same traces used by TITAN Observability.</p></div></div>
+<section class="card-box">
+  <form method="POST" class="admin-form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input class="admin-input" name="key" placeholder="Key e.g. storefront.latency" required>
+    <input class="admin-input" name="name" placeholder="Human name" required>
+    <input class="admin-input" name="operation_pattern" placeholder="Operation pattern, e.g. GET /" required>
+    <input class="admin-input" name="target_percent" type="number" step="0.001" min="0" max="100" value="99.0">
+    <input class="admin-input" name="window_hours" type="number" min="1" max="720" value="24">
+    <input class="admin-input" name="max_latency_ms" type="number" step="0.1" min="0" placeholder="Max p95 ms (optional)">
+    <label><input type="checkbox" name="enabled" value="1" checked> Enabled</label>
+    <button class="admin-btn admin-btn--primary" type="submit">Save SLO</button>
+  </form>
+</section>
+<section class="card-box"><h3>Current objectives</h3>
+<div class="table-wrap"><table class="admin-table"><thead><tr><th>SLO</th><th>Availability</th><th>P95</th><th>Window</th><th>Result</th><th>Release</th></tr></thead><tbody>
+{% for r in reports %}<tr><td><strong>{{ r.name }}</strong><br><small>{{ r.key }}</small></td><td>{{ '%.3f'|format(r.availability_percent) }}% / {{ '%.3f'|format(r.target_percent) }}%</td><td>{{ '%.1f'|format(r.p95_ms) }} ms{% if r.max_latency_ms is not none %} / {{ r.max_latency_ms }} ms{% endif %}</td><td>{{ r.window_hours }}h · {{ r.total }} spans</td><td><span class="status-pill status-pill--{{ 'success' if r.healthy else 'critical' }}">{{ 'Healthy' if r.healthy else 'Needs attention' }}</span></td><td><small>{{ r.release }}</small></td></tr>{% else %}<tr><td colspan="6">No SLO policies yet.</td></tr>{% endfor %}
+</tbody></table></div></section>
+{% endblock %}

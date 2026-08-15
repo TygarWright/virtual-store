@@ -1,6 +1,7 @@
 import os
 import secrets
 import uuid
+import time
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
@@ -19,6 +20,7 @@ from flask_wtf.csrf import generate_csrf
 from functools import wraps
 
 import config
+import observability_service
 import database as db
 from helpers import (
     login_required, get_csrf_token, check_csrf, check_csrf_api, slugify,
@@ -257,6 +259,62 @@ def create_app():
           g.request_id = request_id
           # Also set it in the Sentry scope for error events
           sentry_sdk.set_tag("request_id", request_id)
+          g.trace_id = request.headers.get("X-Trace-ID", request_id)
+          sentry_sdk.set_tag("trace_id", g.trace_id)
+          try:
+              conn = db.get_db()
+              try:
+                  db.ensure_round25_schema(conn)
+                  db.ensure_round42_schema(conn)
+                  db.ensure_round43_schema(conn)
+              except Exception:
+                  pass
+              span_id, span_started = observability_service.start_span(
+                  conn, trace_id=g.trace_id, kind="http",
+                  name=f"{request.method} {request.path}", request_id=request_id,
+                  attributes={"endpoint": request.endpoint or ""},
+              )
+              g.observability_span_id = span_id
+              g.observability_span_started = span_started
+          except Exception:
+              g.observability_span_id = None
+              g.observability_span_started = None
+
+      @app.after_request
+      def add_trace_headers(response):
+          response.headers["X-Request-ID"] = getattr(g, "request_id", str(uuid.uuid4()))
+          response.headers["X-Trace-ID"] = getattr(g, "trace_id", getattr(g, "request_id", ""))
+          try:
+              span_id = getattr(g, "observability_span_id", None)
+              started = getattr(g, "observability_span_started", None)
+              if span_id and started is not None:
+                  observability_service.finish_span(
+                      db.get_db(), span_id, started,
+                      status="error" if response.status_code >= 500 else "ok",
+                      error=f"HTTP {response.status_code}" if response.status_code >= 500 else "",
+                  )
+                  elapsed_ms = (time.perf_counter() - started) * 1000 if started is not None else 0
+                  alert_type = None
+                  alert_severity = None
+                  if response.status_code >= 500:
+                      alert_type, alert_severity = 'http_5xx', 'high'
+                  elif elapsed_ms >= float(os.environ.get('OBS_SLOW_REQUEST_MS', '1500')):
+                      alert_type, alert_severity = 'slow_request', 'medium'
+                  if alert_type:
+                      try:
+                          observability_service.emit_alert(
+                              db.get_db(),
+                              trace_id=getattr(g, "trace_id", ""),
+                              alert_type=alert_type,
+                              severity=alert_severity,
+                              title=f"{request.method} {request.path}",
+                              details=f"Status {response.status_code}; duration {elapsed_ms:.1f}ms; request {getattr(g,'request_id','')}",
+                          )
+                      except Exception:
+                          pass
+          except Exception:
+              pass
+          return response
 
       # 4. Block direct access to product files in static/ (for security)
       @app.before_request
@@ -468,11 +526,12 @@ def create_app():
                   "intelligence": {"admin_insights"}, "customers": {"admin_customers", "admin_customer_timeline"},
                   "products": {"admin_products", "admin_product_form"}, "homepage": {"admin_sections"},
                   "coupons": {"admin_coupons", "admin_coupon_history"}, "content": {"admin_testimonials", "admin_faqs"},
-                  "newsletter": {"admin_newsletter"}, "settings": {"admin_settings"}, "audit": {"admin_audit_log"},
+                  "newsletter": {"admin_newsletter"}, "settings": {"admin_settings"}, "approvals": {"admin_approvals", "admin_approval_approve", "admin_approval_reject"}, "audit": {"admin_audit_log"},
                   "inventory": {"admin_stock_requests"}, "tickets": {"admin_tickets", "admin_tickets_new", "admin_tickets_status", "admin_tickets_reply"},
                   "team": {"admin_team"}, "team_hub": {"admin_team_hub", "admin_team_hub_poll"}, "notices": {"admin_notices"},
-                  "guardian": {"admin_guardian", "admin_guardian_scan", "admin_guardian_resolve"},
-                  "simulation": {"admin_simulation_lab"}, "training": {"admin_training"}, "account": {"admin_account"},
+                  "guardian": {"admin_guardian", "admin_guardian_scan", "admin_guardian_resolve", "admin_guardian_acknowledge", "admin_guardian_reopen"},
+                  "analytics": {"admin_analytics"},
+                  "simulation": {"admin_simulation_lab"}, "training": {"admin_training"}, "memory": {"admin_institutional_memory"}, "flags": {"admin_feature_flags"}, "experiments": {"admin_experiments"}, "account": {"admin_account"}, "observability": {"admin_observability"}, "workflows": {"admin_workflows"}, "reconciliation": {"admin_reconciliation"},
               }
               return ep in groups.get(section, set())
           try:
@@ -483,9 +542,9 @@ def create_app():
           section_labels = {
               "dashboard":"Overview", "orders":"Orders", "intelligence":"Intelligence", "customers":"Customers",
               "products":"Products", "homepage":"Homepage", "coupons":"Coupons", "content":"Content",
-              "newsletter":"Newsletter", "settings":"Settings", "audit":"Audit Log", "inventory":"Inventory",
+              "newsletter":"Newsletter", "settings":"Settings", "approvals":"Approvals", "audit":"Audit Log", "inventory":"Inventory",
               "tickets":"Tickets", "team":"Team", "team_hub":"Team Hub", "notices":"Site Notices",
-              "guardian":"Guardian", "simulation":"Simulation Lab", "training":"Training Mode", "account":"My Account",
+              "guardian":"Guardian", "observability":"Observability", "analytics":"Analytics", "simulation":"Simulation Lab", "training":"Training Mode", "memory":"Institutional Memory", "flags":"Feature Flags", "experiments":"Experiments", "account":"My Account",
           }
           current_section = next((name for name in section_labels if admin_nav_active(name)), "")
           return dict(admin_nav_active=admin_nav_active, admin_current_section=current_section,

@@ -41,7 +41,15 @@ from intelligence_service import (
     assistant_answer, get_business_insights, detect_anomalies, inventory_forecast,
 )
 from permissions import PRESET_PERMISSIONS
-from permissions_comm import get_or_create_global, get_or_create_direct, add_message, messages as team_messages, visible_conversations, mark_read, active_notices
+from permissions_comm import (get_or_create_global, get_or_create_direct, get_or_create_context, add_message, messages as team_messages, visible_conversations, mark_read, active_notices, search_messages, pin_message, list_notifications, mark_notifications_read, set_presence, list_presence,
+    reply_to_message
+,
+    toggle_reaction
+,
+    list_message_reactions
+)
+from mastery_services import search_memory, memory_source_types, record_decision_outcome, decision_effectiveness_report, upsert_feature_flag, flag_enabled, create_or_update_experiment, assign_experiment, index_memory, related_memory, decision_review_history
+from analytics_mastery import analytics_overview, conclude_experiment, conclude_experiment
 # New payment abstraction layer
 from payment.gateways import get_payment_gateway, PaymentResult
 from payment.refund import initiate_refund, process_refund
@@ -50,7 +58,8 @@ from payment.state_machine import PaymentState, OrderState
 # Existing phase2_services for state transitions and other helpers
 from governance_service import (
     request_or_validate_approval, coupon_discount_with_margin, escalate_overdue_exceptions,
-    policy_requires_approval,
+    policy_requires_approval, approve as approve_governance, reject as reject_governance, expire_pending_approvals,
+    ensure_operations_lab_schema, simulation_catalog, simulation_report, record_training_attempt, training_report,
 )
 from phase2_services import (
     mark_payment_captured,
@@ -1272,35 +1281,40 @@ def admin_order_deliver(order_id):
     order_items = conn.execute(
         "SELECT * FROM order_items WHERE order_id = ?", (order_id,)
     ).fetchall()
-    conn.execute(
-        "UPDATE orders SET status = 'delivered', delivery_message = ?, delivered_at = ? WHERE id = ?",
-        (message, db.now(), order_id),
+    from commerce_workflows import deliver_order_durable
+    item_line = order["product_name"] if not order_items else ", ".join(
+        f"{it['product_name']} x{it['quantity']}" for it in order_items
     )
-    conn.commit()
-    conn.close()
 
-    if customer_email_notifications_enabled():
-        item_line = order["product_name"] if not order_items else ", ".join(
-            f"{it['product_name']} x{it['quantity']}" for it in order_items
+    def send_delivery_email():
+        if customer_email_notifications_enabled():
+            send_email(
+                order["customer_email"],
+                f"Your order {order['order_ref']} has been delivered",
+                f"Hi {order['customer_name']},\n\n"
+                f"Great news — your order for \"{item_line}\" is ready!\n\n"
+                f"{message}\n\n"
+                f"Order reference: {order['order_ref']}\n\nThank you for shopping with us.",
+            )
+
+    def send_delivery_sms():
+        if order["customer_phone"] and twilio_enabled():
+            send_sms(order["customer_phone"], f"Your order {order['order_ref']} is ready! Check your email for details.")
+
+    try:
+        result = deliver_order_durable(
+            conn, order=order, delivery_message=message,
+            notify_email_callable=send_delivery_email if customer_email_notifications_enabled() else None,
+            notify_sms_callable=send_delivery_sms if (order["customer_phone"] and twilio_enabled()) else None,
         )
-        send_email(
-            order["customer_email"],
-            f"Your order {order['order_ref']} has been delivered",
-            f"Hi {order['customer_name']},\n\n"
-            f"Great news — your order for \"{item_line}\" is ready!\n\n"
-            f"{message}\n\n"
-            f"Order reference: {order['order_ref']}\n\nThank you for shopping with us.",
-        )
-    # SMS notification if customer phone available
-    if order["customer_phone"] and twilio_enabled():
-        try:
-            send_sms(order["customer_phone"],
-                     f"Your order {order['order_ref']} is ready! Check your email for details.")
-        except Exception:
-            pass
-    flash("Order delivered. Customer has been notified." if customer_email_notifications_enabled()
-          else "Order marked as delivered. Share the details with the customer directly "
-               "(email sending isn't set up).", "success")
+    except Exception as exc:
+        conn.close()
+        flash(f"Delivery could not be completed safely: {exc}", "error")
+        return redirect(url_for("admin.admin_order_detail", order_id=order_id))
+    conn.close()
+    notified = bool((result.get("context") or {}).get("email_sent") or (result.get("context") or {}).get("sms_sent"))
+    flash("Order delivered. Customer has been notified." if notified else
+          "Order marked as delivered. Share the details with the customer directly (notifications aren't set up).", "success")
     return redirect(url_for("admin.admin_order_detail", order_id=order_id))
 
 
@@ -1575,9 +1589,23 @@ def admin_coupons_toggle(coupon_id):
 def admin_coupons_delete(coupon_id):
     check_csrf()
     conn = db.get_db()
+    coupon = conn.execute("SELECT id, code, active, usage_limit FROM coupons WHERE id=?", (coupon_id,)).fetchone()
+    if not coupon:
+        conn.close(); abort(404)
+    approval_raw = request.form.get("approval_id", "").strip()
+    approval = request_or_validate_approval(
+        conn, action="promotion.delete", requested_by=int(session["admin_id"]),
+        entity="coupon", entity_id=coupon_id, amount=0,
+        reason=f"Delete promotion {coupon['code']}",
+        metadata={"code": coupon["code"]},
+        approval_id=int(approval_raw) if approval_raw.isdigit() else None,
+    )
+    if not approval["allowed"]:
+        conn.close()
+        flash(f"Deleting a promotion requires second-person approval. Approval #{approval['approval_id']} was created.", "warning")
+        return redirect(url_for("admin.admin_coupons", approval_id=approval["approval_id"]))
     conn.execute("DELETE FROM coupons WHERE id = ?", (coupon_id,))
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
     log_admin_action("coupon_delete", f"coupon_id={coupon_id}")
     flash("Coupon deleted.", "success")
     return redirect(url_for("admin.admin_coupons"))
@@ -2349,6 +2377,10 @@ def admin_tickets_reply(ticket_id):
 def admin_team_hub():
     admin_id = int(session["admin_id"])
     conn = db.get_db()
+    try:
+        db.ensure_round29_schema(conn)
+    except Exception:
+        pass
     if request.method == "POST":
         check_csrf()
         kind = (request.form.get("kind") or "global").strip()
@@ -2381,8 +2413,32 @@ def admin_team_hub():
     msgs = team_messages(conn, int(selected["id"]), admin_id)
     if msgs: mark_read(conn, int(selected["id"]), admin_id, int(msgs[-1]["id"]))
     admins = conn.execute("SELECT id, username, role FROM admin_users WHERE is_active=1 AND id<>? ORDER BY username", (admin_id,)).fetchall()
+    presence_rows = list_presence(conn, [int(a["id"]) for a in admins]) if admins else []
+    unread_notifications = list_notifications(conn, admin_id, unread_only=True, limit=50)
     conn.close()
-    return render_template("admin/team_hub.html", conversations=conversations, selected=selected, messages=msgs, admins=admins)
+    presence = {int(r["admin_id"]): dict(r) for r in presence_rows}
+    return render_template(
+        "admin/team_hub.html", conversations=conversations, selected=selected, messages=msgs,
+        admins=admins, presence=presence, unread_notifications=unread_notifications,
+    )
+
+@admin_bp.route("/team-hub/context")
+@login_required
+def admin_team_hub_context():
+    context_type = (request.args.get("type") or "").strip().lower()
+    context_id = request.args.get("id", type=int)
+    if not context_id or context_type not in {"order", "customer", "ticket", "exception"}:
+        abort(400)
+    required = {"order": "orders.view", "customer": "customers.view", "ticket": "tickets.view", "exception": "audit.view"}[context_type]
+    if not has_permission(required):
+        abort(403)
+    conn = db.get_db()
+    try: db.ensure_round29_schema(conn)
+    except Exception: pass
+    title = request.args.get("title") or f"{context_type.title()} #{context_id}"
+    cid = get_or_create_context(conn, context_type=context_type, context_id=context_id, created_by=int(session["admin_id"]), title=title)
+    conn.close()
+    return redirect(url_for("admin.admin_team_hub", conversation=cid))
 
 @admin_bp.route("/team-hub/poll/<int:conversation_id>")
 @login_required
@@ -2390,6 +2446,291 @@ def admin_team_hub():
 def admin_team_hub_poll(conversation_id):
     conn = db.get_db(); msgs = team_messages(conn, conversation_id, int(session["admin_id"])); conn.close()
     return jsonify([dict(m) for m in msgs[-100:]])
+
+@admin_bp.route("/team-hub/search")
+@login_required
+@requires_permission("team.chat")
+def admin_team_hub_search():
+    conn = db.get_db(); q=(request.args.get("q") or "").strip(); cid=request.args.get("conversation", type=int)
+    rows = search_messages(conn, cid, int(session["admin_id"]), q) if cid and q else []
+    conn.close(); return jsonify([dict(r) for r in rows])
+
+@admin_bp.route("/team-hub/pin", methods=["POST"])
+@login_required
+@requires_permission("team.chat")
+def admin_team_hub_pin():
+    check_csrf(); conn=db.get_db(); ok=pin_message(conn, int(request.form.get("message_id", 0)), int(session["admin_id"])); conn.close()
+    return jsonify({"ok": ok})
+
+@admin_bp.route("/team-hub/notifications")
+@login_required
+@requires_permission("team.chat")
+def admin_team_hub_notifications():
+    conn=db.get_db(); rows=list_notifications(conn, int(session["admin_id"]), unread_only=True); conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@admin_bp.route("/team-hub/notifications/read", methods=["POST"])
+@login_required
+@requires_permission("team.chat")
+def admin_team_hub_notifications_read():
+    check_csrf(); conn=db.get_db(); mark_notifications_read(conn, int(session["admin_id"]), request.json.get("ids") if request.is_json else None); conn.close(); return jsonify({"ok": True})
+
+@admin_bp.route("/team-hub/presence", methods=["POST"])
+@login_required
+@requires_permission("team.chat")
+def admin_team_hub_presence():
+    state=(request.json or {}).get("state","online") if request.is_json else request.form.get("state","online")
+    conn=db.get_db(); set_presence(conn, int(session["admin_id"]), state); conn.close(); return jsonify({"ok": True, "state": state})
+
+@admin_bp.route("/team-hub/presence", methods=["GET"])
+@login_required
+@requires_permission("team.chat")
+def admin_team_hub_presence_get():
+    conn=db.get_db(); rows=list_presence(conn); conn.close()
+    return jsonify([dict(r) for r in rows])
+
+
+
+@admin_bp.route("/team-hub/reply", methods=["POST"])
+@login_required
+@requires_permission("team.chat")
+def admin_team_hub_reply():
+    check_csrf()
+    payload = request.get_json(silent=True) or request.form
+    cid = int(payload.get("conversation_id", 0)); parent_id = int(payload.get("parent_message_id", 0)); body = str(payload.get("body", ""))
+    conn = db.get_db()
+    try:
+        mid = reply_to_message(conn, cid, int(session["admin_id"]), parent_id, body)
+        return jsonify({"ok": True, "message_id": mid})
+    except Exception as exc:
+        conn.rollback(); return jsonify({"ok": False, "error": str(exc)}), 400
+    finally:
+        conn.close()
+
+
+@admin_bp.route("/team-hub/reaction", methods=["POST"])
+@login_required
+@requires_permission("team.chat")
+def admin_team_hub_reaction():
+    check_csrf()
+    payload = request.get_json(silent=True) or request.form
+    conn = db.get_db()
+    try:
+        result = toggle_reaction(conn, int(payload.get("message_id", 0)), int(session["admin_id"]), str(payload.get("reaction", "")))
+        return jsonify({"ok": True, **result})
+    except Exception as exc:
+        conn.rollback(); return jsonify({"ok": False, "error": str(exc)}), 400
+    finally:
+        conn.close()
+
+
+@admin_bp.route("/team-hub/reactions", methods=["GET"])
+@login_required
+@requires_permission("team.chat")
+def admin_team_hub_reactions():
+    conn = db.get_db()
+    ids = [int(x) for x in request.args.getlist("message_id") if str(x).isdigit()]
+    rows = list_message_reactions(conn, ids)
+    conn.close()
+    return jsonify(rows)
+
+@admin_bp.route("/support")
+@login_required
+@requires_permission("customers.view")
+def admin_support_cockpit():
+    """Unified support cockpit: customer, order, ticket and team context in one view."""
+    q = (request.args.get("q") or "").strip()
+    customer_id = request.args.get("customer_id", type=int)
+    order_id = request.args.get("order_id", type=int)
+    conn = db.get_db()
+    selected_customer = None
+    customer_orders = []
+    customer_tickets = []
+    customer_context_conversations = []
+    search_results = []
+    try:
+        if q:
+            like = f"%{q}%"
+            search_results = conn.execute(
+                "SELECT id, name, email, phone, created_at FROM customers "
+                "WHERE name LIKE ? OR email LIKE ? OR phone LIKE ? "
+                "ORDER BY created_at DESC LIMIT 25",
+                (like, like, like),
+            ).fetchall()
+        if customer_id:
+            selected_customer = conn.execute(
+                "SELECT id, name, email, phone, created_at FROM customers WHERE id=?",
+                (customer_id,),
+            ).fetchone()
+            if selected_customer:
+                customer_orders = conn.execute(
+                    "SELECT id, order_ref, product_name, amount, status, payment_state, order_state, created_at "
+                    "FROM orders WHERE customer_email=? OR customer_phone=? ORDER BY created_at DESC LIMIT 50",
+                    (selected_customer["email"], selected_customer["phone"]),
+                ).fetchall()
+                customer_tickets = conn.execute(
+                    "SELECT id, title, status, created_at, updated_at FROM admin_tickets "
+                    "WHERE title LIKE ? OR description LIKE ? ORDER BY created_at DESC LIMIT 50",
+                    (f"%{selected_customer['email']}%", f"%{selected_customer['email']}%"),
+                ).fetchall()
+                customer_context_conversations = conn.execute(
+                    "SELECT c.id, c.title, c.updated_at, "
+                    "(SELECT body FROM team_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) AS last_message "
+                    "FROM team_conversations c WHERE c.kind='context' AND c.context_type='customer' AND c.context_id=? "
+                    "ORDER BY c.updated_at DESC LIMIT 20",
+                    (int(customer_id),),
+                ).fetchall()
+        selected_order = None
+        if order_id:
+            selected_order = conn.execute(
+                "SELECT id, order_ref, product_name, amount, status, payment_state, order_state, "
+                "customer_name, customer_email, customer_phone, created_at, paid_at, delivered_at, refunded_amount "
+                "FROM orders WHERE id=?", (order_id,)
+            ).fetchone()
+            if selected_order and not selected_customer:
+                selected_customer = conn.execute(
+                    "SELECT id, name, email, phone, created_at FROM customers WHERE email=? ORDER BY id DESC LIMIT 1",
+                    (selected_order["customer_email"],),
+                ).fetchone()
+                if selected_customer:
+                    customer_orders = conn.execute(
+                        "SELECT id, order_ref, product_name, amount, status, payment_state, order_state, created_at "
+                        "FROM orders WHERE customer_email=? OR customer_phone=? ORDER BY created_at DESC LIMIT 50",
+                        (selected_customer["email"], selected_customer["phone"]),
+                    ).fetchall()
+        else:
+            selected_order = None
+    finally:
+        conn.close()
+    return render_template(
+        "admin/support_cockpit.html",
+        q=q, search_results=search_results, selected_customer=selected_customer,
+        customer_orders=customer_orders, customer_tickets=customer_tickets, customer_context_conversations=customer_context_conversations, selected_order=selected_order,
+    )
+
+@admin_bp.route("/approvals", methods=["GET"])
+@login_required
+@requires_permission("audit.view")
+def admin_approvals():
+    conn=db.get_db(); expire_pending_approvals(conn)
+    rows=conn.execute("SELECT a.*, au.username AS requester FROM admin_approval_requests a LEFT JOIN admin_users au ON au.id=a.requested_by ORDER BY CASE a.status WHEN 'pending' THEN 0 ELSE 1 END, a.created_at DESC LIMIT 200").fetchall()
+    enriched=[]
+    for row in rows:
+        item=dict(row); item["steps"]= [dict(r) for r in conn.execute("SELECT step_index,status,approved_by,note,approved_at FROM approval_steps WHERE approval_id=? ORDER BY step_index", (int(row["id"]),)).fetchall()]
+        enriched.append(item)
+    policies=conn.execute("SELECT action,threshold_amount,require_two_person,required_approvals,approval_expiry_minutes,enabled,version,updated_at FROM high_risk_action_policies ORDER BY action").fetchall()
+    conn.close(); return render_template("admin/approvals.html", approvals=enriched, policies=policies)
+
+@admin_bp.route("/approvals/policy", methods=["POST"])
+@login_required
+@requires_permission("governance.approve")
+def admin_approval_policy_update():
+    check_csrf()
+    action=(request.form.get("action") or "").strip()
+    if not action:
+        abort(400)
+    threshold=max(0, request.form.get("threshold_amount", type=int) or 0)
+    required=max(1, min(5, request.form.get("required_approvals", type=int) or 1))
+    expiry=max(1, min(10080, request.form.get("approval_expiry_minutes", type=int) or 1440))
+    enabled=1 if request.form.get("enabled") == "1" else 0
+    now=db.now(); conn=db.get_db()
+    existing=conn.execute("SELECT version FROM high_risk_action_policies WHERE action=?", (action,)).fetchone()
+    version=max(1, int(existing[0] if existing else 0)+1)
+    conn.execute("""INSERT INTO high_risk_action_policies(action,threshold_amount,require_two_person,required_approvals,approval_expiry_minutes,enabled,version,updated_at)
+                   VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(action) DO UPDATE SET threshold_amount=excluded.threshold_amount,require_two_person=excluded.require_two_person,required_approvals=excluded.required_approvals,approval_expiry_minutes=excluded.approval_expiry_minutes,enabled=excluded.enabled,version=excluded.version,updated_at=excluded.updated_at""", (action,threshold,1 if required>0 else 0,required,expiry,enabled,version,now))
+    try:
+        from backend_kernel import publish_event
+        publish_event(conn, topic="governance.approval_policy.updated", aggregate="approval_policy", aggregate_id=action, payload={"action":action,"threshold_amount":threshold,"required_approvals":required,"approval_expiry_minutes":expiry,"enabled":bool(enabled),"version":version,"updated_by":int(session["admin_id"])})
+    except Exception:
+        pass
+    conn.commit(); conn.close(); flash("Approval policy updated.", "success")
+    return redirect(url_for("admin.admin_approvals"))
+
+@admin_bp.route("/approvals/<int:approval_id>/approve", methods=["POST"])
+@login_required
+@requires_permission("governance.approve")
+def admin_approval_approve(approval_id):
+    check_csrf(); conn=db.get_db()
+    success=approve_governance(conn, approval_id, approved_by=int(session["admin_id"]), note=(request.form.get("note") or "").strip())
+    conn.close(); flash("Approval recorded." if success else "Approval rejected by policy, expiry or state.", "success" if success else "error")
+    return redirect(url_for("admin.admin_approvals"))
+
+@admin_bp.route("/approvals/<int:approval_id>/reject", methods=["POST"])
+@login_required
+@requires_permission("governance.approve")
+def admin_approval_reject(approval_id):
+    check_csrf(); conn=db.get_db()
+    success=reject_governance(conn, approval_id, rejected_by=int(session["admin_id"]), note=(request.form.get("note") or "").strip())
+    conn.close(); flash("Approval rejected." if success else "Approval could not be rejected.", "success" if success else "error")
+    return redirect(url_for("admin.admin_approvals"))
+
+@admin_bp.route("/institutional-memory", methods=["GET", "POST"])
+@login_required
+@requires_permission("analytics.view")
+def admin_institutional_memory():
+    admin_id=int(session["admin_id"]); conn=db.get_db()
+    if request.method == "POST":
+        check_csrf(); decision_id=request.form.get("decision_id", type=int)
+        if decision_id:
+            try:
+                record_decision_outcome(conn, decision_id=decision_id, outcome=request.form.get("outcome", ""), lesson=request.form.get("lesson", ""), future_recommendation=request.form.get("future_recommendation", ""), reviewed_by=admin_id, effectiveness=request.form.get("effectiveness", "inconclusive"), effectiveness_score=request.form.get("effectiveness_score", type=int))
+                flash("Decision outcome recorded.", "success")
+            except ValueError as exc:
+                flash(str(exc), "error")
+            conn.close(); return redirect(url_for("admin.admin_institutional_memory"))
+    q=(request.args.get("q") or "").strip(); source_type=(request.args.get("source_type") or "").strip()
+    rows=search_memory(conn, q, 100, source_type=source_type)
+    decisions=conn.execute("SELECT * FROM decision_journal ORDER BY CASE WHEN outcome='' THEN 0 ELSE 1 END, created_at DESC LIMIT 100").fetchall()
+    selected_id=request.args.get("decision_id", type=int)
+    selected_history=decision_review_history(conn, selected_id) if selected_id else []
+    selected_related=related_memory(conn, "decision", selected_id, limit=12) if selected_id else []
+    source_types=memory_source_types(conn)
+    effectiveness=decision_effectiveness_report(conn)
+    conn.close(); return render_template("admin/institutional_memory.html", rows=rows, decisions=decisions, q=q, source_type=source_type, source_types=source_types, effectiveness=effectiveness, selected_id=selected_id, selected_history=selected_history, selected_related=selected_related)
+
+@admin_bp.route("/analytics")
+@login_required
+@requires_permission("analytics.view")
+def admin_analytics():
+    conn=db.get_db()
+    days=request.args.get("days",30,type=int)
+    steps_raw=(request.args.get("funnel") or "view_product,add_to_cart,checkout_started,payment_succeeded").split(",")
+    steps=[x.strip() for x in steps_raw if x.strip()]
+    experiment_id=request.args.get("experiment_id", type=int)
+    result=analytics_overview(conn, days=days, funnel_steps=steps, experiment_id=experiment_id)
+    conn.close()
+    return render_template("admin/analytics.html", result=result, days=days, funnel_steps=steps, experiment_id=experiment_id)
+
+@admin_bp.route("/feature-flags", methods=["GET", "POST"])
+@login_required
+@requires_permission("settings.manage")
+def admin_feature_flags():
+    conn=db.get_db()
+    if request.method == "POST":
+        check_csrf(); upsert_feature_flag(conn, key=request.form.get("key",""), description=request.form.get("description",""), enabled=request.form.get("enabled") == "1", rollout_percent=request.form.get("rollout_percent",0), updated_by=int(session["admin_id"]))
+        flash("Feature flag saved.", "success"); conn.close(); return redirect(url_for("admin.admin_feature_flags"))
+    rows=conn.execute("SELECT * FROM feature_flags ORDER BY key").fetchall(); conn.close(); return render_template("admin/feature_flags.html", flags=rows)
+
+@admin_bp.route("/experiments", methods=["GET", "POST"])
+@login_required
+@requires_permission("analytics.view")
+def admin_experiments():
+    conn=db.get_db()
+    if request.method == "POST":
+        check_csrf(); action=request.form.get("action","save")
+        try:
+            if action == "conclude":
+                conclude_experiment(conn, experiment_id=request.form.get("experiment_id", type=int), concluded_by=int(session["admin_id"]), conclusion=request.form.get("conclusion",""), require_guardrails=True)
+                flash("Experiment concluded safely.", "success")
+            else:
+                variants=[v.strip() for v in (request.form.get("variants") or "").split(",") if v.strip()]
+                allocation={v:int(request.form.get("alloc_"+v, 0) or 0) for v in variants}
+                create_or_update_experiment(conn, key=request.form.get("key",""), name=request.form.get("name",""), variants=variants, allocation=allocation, primary_metric=request.form.get("primary_metric",""), status=request.form.get("status","draft"), created_by=int(session["admin_id"]))
+                flash("Experiment saved.", "success")
+        except ValueError as exc:
+            flash(str(exc), "error")
+        conn.close(); return redirect(url_for("admin.admin_experiments"))
+    rows=conn.execute("SELECT * FROM experiments ORDER BY updated_at DESC").fetchall(); conn.close(); return render_template("admin/experiments.html", experiments=rows)
 
 @admin_bp.route("/notices", methods=["GET", "POST"])
 @login_required
@@ -2607,15 +2948,46 @@ def admin_guardian():
         return redirect(url_for("admin.admin_dashboard"))
 
     result = run_guardian_scan(conn)
+    from governance_service import guardian_cross_signal_summary, guardian_health
+    cross_signal = guardian_cross_signal_summary(conn)
+    health = guardian_health(conn)
     exceptions = conn.execute(
         """SELECT e.*, a.username AS assignee
            FROM business_exceptions e LEFT JOIN admin_users a ON a.id=e.assigned_to
-           WHERE e.status='open'
+           WHERE e.status IN ('open','acknowledged')
            ORDER BY CASE e.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
                     COALESCE(e.due_at, e.created_at) ASC LIMIT 200"""
     ).fetchall()
+    assignees = conn.execute("SELECT id, username, role FROM admin_users WHERE is_active=1 ORDER BY username").fetchall()
+    from governance_service import ensure_guardian_mastery_schema
+    ensure_guardian_mastery_schema(conn)
+    sla_policies = conn.execute("SELECT * FROM guardian_sla_policies ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END").fetchall()
     conn.close()
-    return render_template("admin/guardian.html", result=result, exceptions=exceptions)
+    return render_template("admin/guardian.html", result=result, health=health, cross_signal=cross_signal, exceptions=exceptions, assignees=assignees, sla_policies=sla_policies)
+
+
+@admin_bp.route("/guardian/exception/<int:exception_id>/assign", methods=["POST"])
+@login_required
+@requires_permission("audit.view")
+def admin_guardian_assign(exception_id):
+    check_csrf()
+    conn=db.get_db()
+    assignee=(request.form.get("assigned_to") or "").strip()
+    due_at=(request.form.get("due_at") or "").strip() or None
+    if assignee:
+        try:
+            admin_id=int(assignee)
+        except ValueError:
+            admin_id=0
+    else:
+        admin_id=0
+    from governance_service import assign_exception, notify_exception_assignee
+    success=assign_exception(conn, exception_id, assigned_to=admin_id, due_at=due_at)
+    if success and admin_id:
+        notify_exception_assignee(conn, exception_id, kind="guardian_assigned")
+    conn.close()
+    flash("Exception assignment updated." if success else "Exception assignment failed.", "success" if success else "error")
+    return redirect(url_for("admin.admin_guardian"))
 
 
 @admin_bp.route("/guardian/exception/<int:exception_id>/resolve", methods=["POST"])
@@ -2627,10 +2999,66 @@ def admin_guardian_resolve(exception_id):
     resolution = (request.form.get("resolution") or "Resolved by operations").strip()
     conn = db.get_db()
     success = resolve_exception(conn, exception_id, resolved_by=int(session["admin_id"]), resolution=resolution)
+    if success:
+        try:
+            from governance_service import notify_exception_assignee
+            notify_exception_assignee(conn, exception_id, kind="guardian_resolved")
+        except Exception:
+            pass
     conn.close()
     flash("Exception resolved." if success else "Exception could not be resolved.", "success" if success else "error")
     return redirect(url_for("admin.admin_guardian"))
 
+@admin_bp.route("/guardian/exception/<int:exception_id>/acknowledge", methods=["POST"])
+@login_required
+@requires_permission("audit.view")
+def admin_guardian_acknowledge(exception_id):
+    check_csrf()
+    from governance_service import acknowledge_exception, notify_exception_assignee
+    conn = db.get_db(); admin_id = int(session["admin_id"])
+    success = acknowledge_exception(conn, exception_id, admin_id=admin_id)
+    if success:
+        notify_exception_assignee(conn, exception_id, kind="guardian_acknowledged")
+    conn.close()
+    flash("Exception acknowledged." if success else "Exception could not be acknowledged.", "success" if success else "error")
+    return redirect(url_for("admin.admin_guardian"))
+
+
+@admin_bp.route("/guardian/exception/<int:exception_id>/reopen", methods=["POST"])
+@login_required
+@requires_permission("audit.view")
+def admin_guardian_reopen(exception_id):
+    check_csrf()
+    from governance_service import reopen_exception, notify_exception_assignee
+    conn = db.get_db(); admin_id = int(session["admin_id"])
+    success = reopen_exception(conn, exception_id, admin_id=admin_id, reason=(request.form.get("reason") or "").strip())
+    if success:
+        notify_exception_assignee(conn, exception_id, kind="guardian_reopened")
+    conn.close()
+    flash("Exception reopened." if success else "Exception could not be reopened.", "success" if success else "error")
+    return redirect(url_for("admin.admin_guardian"))
+
+
+@admin_bp.route("/guardian/sla-policy", methods=["POST"])
+@login_required
+@requires_permission("audit.manage")
+def admin_guardian_sla_policy():
+    check_csrf()
+    severity=(request.form.get("severity") or "").strip().lower()
+    if severity not in {"critical","high","medium","low"}:
+        abort(400)
+    due=max(1, request.form.get("due_minutes", type=int) or 1)
+    grace=max(0, request.form.get("escalation_grace_minutes", type=int) or 0)
+    enabled=1 if request.form.get("enabled") == "1" else 0
+    notify_assignee=1 if request.form.get("notify_assignee") == "1" else 0
+    notify_admins=1 if request.form.get("notify_admins") == "1" else 0
+    conn=db.get_db()
+    from governance_service import ensure_guardian_mastery_schema
+    ensure_guardian_mastery_schema(conn)
+    conn.execute("UPDATE guardian_sla_policies SET due_minutes=?, escalation_grace_minutes=?, notify_assignee=?, notify_admins=?, enabled=?, updated_at=? WHERE severity=?", (due,grace,notify_assignee,notify_admins,enabled,db.now(),severity))
+    conn.commit(); conn.close()
+    flash("Guardian SLA policy updated.", "success")
+    return redirect(url_for("admin.admin_guardian"))
 
 @admin_bp.route("/guardian/scan", methods=["POST"])
 @login_required
@@ -2643,81 +3071,274 @@ def admin_guardian_scan():
     return redirect(url_for("admin.admin_guardian"))
 
 
+@admin_bp.route("/guardian/health")
+@login_required
+@requires_permission("audit.view")
+def admin_guardian_health():
+    from governance_service import guardian_health
+    conn = db.get_db()
+    try:
+        report = guardian_health(conn)
+    finally:
+        conn.close()
+    return jsonify(report), (200 if report.get("ok") else 503)
+
+
+@admin_bp.route("/guardian/detectors")
+@login_required
+@requires_permission("audit.view")
+def admin_guardian_detectors():
+    from governance_service import guardian_detectors
+    conn=db.get_db(); rows=guardian_detectors(conn); conn.close()
+    return render_template("admin/guardian_detectors.html", detectors=rows)
+
+@admin_bp.route("/guardian/exception/<int:exception_id>/timeline")
+@login_required
+@requires_permission("audit.view")
+def admin_guardian_exception_timeline(exception_id):
+    from governance_service import exception_timeline
+    conn=db.get_db(); rows=exception_timeline(conn, exception_id); conn.close()
+    return jsonify({"exception_id": exception_id, "events": [dict(r) for r in rows]})
+
+@admin_bp.route("/events")
+@login_required
+@requires_permission("audit.view")
+def admin_events():
+    from backend_kernel import list_domain_events, retryable_event_deliveries, dead_letter_event_deliveries
+    conn=db.get_db()
+    topic=(request.args.get("topic") or "").strip()
+    aggregate=(request.args.get("aggregate") or "").strip()
+    events=list_domain_events(conn, topic=topic, aggregate=aggregate, limit=200)
+    retryable=retryable_event_deliveries(conn, limit=100)
+    dead_letters=dead_letter_event_deliveries(conn, limit=100)
+    conn.close()
+    return render_template("admin/events.html", events=events, retryable=retryable, dead_letters=dead_letters, topic=topic, aggregate=aggregate)
+
+
+@admin_bp.route("/observability/policies", methods=["GET", "POST"])
+@login_required
+@requires_permission("settings.manage")
+def admin_observability_policies():
+    import observability_service
+    conn=db.get_db()
+    if request.method == "POST":
+        check_csrf()
+        observability_service.set_alert_policy(conn, alert_type=request.form.get("alert_type", ""), enabled=request.form.get("enabled") == "1", severity=request.form.get("severity", "medium"), threshold_ms=request.form.get("threshold_ms", type=int), cooldown_minutes=request.form.get("cooldown_minutes", 10, type=int), notify_admins=request.form.get("notify_admins") == "1")
+        flash("Alert policy updated.", "success"); conn.close(); return redirect(url_for("admin.admin_observability_policies"))
+    rows=observability_service.alert_policies(conn); conn.close()
+    return render_template("admin/observability_policies.html", policies=rows)
+
+@admin_bp.route("/observability/slo", methods=["GET", "POST"])
+@login_required
+@requires_permission("audit.view")
+def admin_observability_slo():
+    import observability_service
+    conn = db.get_db()
+    if request.method == "POST":
+        check_csrf()
+        observability_service.upsert_slo_policy(
+            conn,
+            key=(request.form.get("key") or "").strip(),
+            name=(request.form.get("name") or "").strip(),
+            operation_pattern=(request.form.get("operation_pattern") or "").strip(),
+            target_percent=float(request.form.get("target_percent") or 99),
+            window_hours=int(request.form.get("window_hours") or 24),
+            max_latency_ms=(float(request.form.get("max_latency_ms")) if request.form.get("max_latency_ms") else None),
+            enabled=request.form.get("enabled") == "1",
+        )
+        flash("SLO policy saved.", "success")
+        conn.close()
+        return redirect(url_for("admin.admin_observability_slo"))
+    policies = observability_service.slo_policies(conn)
+    reports = [observability_service.slo_report(conn, key=p["key"]) for p in policies]
+    conn.close()
+    return render_template("admin/observability_slo.html", policies=policies, reports=[r for r in reports if r])
+
+@admin_bp.route("/observability")
+@login_required
+@requires_permission("audit.view")
+def admin_observability():
+    """Correlated request/workflow observability without a heavyweight tracing stack."""
+    import observability_service
+    conn = db.get_db(); db.ensure_round25_schema(conn)
+    trace_id = (request.args.get("trace") or "").strip()
+    operation = (request.args.get("operation") or "").strip()
+    spans = observability_service.recent_spans(conn, trace_id=trace_id or None, operation=operation or None, limit=250)
+    summary = observability_service.trace_summary(conn, trace_id) if trace_id else None
+    alerts = observability_service.recent_alerts(conn, status=(request.args.get("alert_status") or "open"), limit=100)
+    conn.close()
+    return render_template("admin/observability.html", spans=spans, trace_id=trace_id, summary=summary, alerts=alerts)
+
+
+@admin_bp.route("/observability/alert/<int:alert_id>/resolve", methods=["POST"])
+@login_required
+@requires_permission("audit.view")
+def admin_observability_resolve_alert(alert_id):
+    check_csrf()
+    import observability_service
+    conn=db.get_db(); success=observability_service.resolve_alert(conn, alert_id, admin_id=int(session["admin_id"])); conn.close()
+    flash("Alert resolved." if success else "Alert could not be resolved.", "success" if success else "error")
+    return redirect(url_for("admin.admin_observability"))
+
+
+
+
+@admin_bp.route("/workflows")
+@login_required
+@requires_permission("orders.view")
+def admin_workflows():
+    conn = db.get_db()
+    rows = conn.execute(
+        "SELECT workflow_id, workflow_type, aggregate_type, aggregate_id, status, current_step, attempt_count, compensation_status, error, created_at, updated_at, completed_at FROM workflow_runs ORDER BY updated_at DESC LIMIT 200"
+    ).fetchall()
+    steps_by={}
+    for row in rows:
+        steps_by[row["workflow_id"]]=conn.execute(
+            "SELECT step_index, step_name, status, error, started_at, completed_at FROM workflow_steps WHERE workflow_id=? ORDER BY step_index",
+            (row["workflow_id"],)
+        ).fetchall()
+    conn.close()
+    return render_template("admin/workflows.html", workflows=rows, steps_by=steps_by)
+
+
+@admin_bp.route("/workflows/<workflow_id>/recover", methods=["POST"])
+@login_required
+@requires_permission("orders.edit")
+def admin_workflow_recover(workflow_id):
+    check_csrf()
+    from workflow_recovery import recover_known_workflow
+    from .storefront import _confirm_order_payment
+    conn=db.get_db()
+    try:
+        result=recover_known_workflow(conn, workflow_id, confirm_callable=_confirm_order_payment)
+        conn.close()
+        log_admin_action("workflow.recover", "workflow", workflow_id, {"result_status": result.get("status") if isinstance(result,dict) else "completed"})
+        flash("Workflow recovery completed or resumed safely.", "success")
+    except Exception as exc:
+        conn.close()
+        flash(f"Workflow recovery refused: {exc}", "error")
+    return redirect(url_for("admin.admin_workflows"))
+
+
+@admin_bp.route("/reconciliation", methods=["GET", "POST"])
+@login_required
+@requires_permission("audit.view")
+def admin_reconciliation():
+    from reconcile_razorpay import reconcile
+    conn = db.get_db(); result = None
+    if request.method == "POST":
+        check_csrf()
+        try:
+            result = reconcile(created_by=int(session["admin_id"]), mode="admin")
+            flash("Provider reconciliation completed.", "success")
+        except Exception as exc:
+            flash(f"Reconciliation failed: {exc}", "error")
+    from reconcile_razorpay import get_open_items
+    runs = conn.execute("SELECT id, provider, mode, status, started_at, completed_at, scanned_orders, repaired_orders, mismatches, summary_json FROM reconciliation_runs ORDER BY started_at DESC LIMIT 50").fetchall()
+    open_items = get_open_items(limit=100)
+    conn.close()
+    return render_template("admin/reconciliation.html", runs=runs, result=result, open_items=open_items)
+
+
+@admin_bp.route("/reconciliation/items/<int:item_id>/resolve", methods=["POST"])
+@login_required
+@requires_permission("audit.view")
+def admin_reconciliation_resolve(item_id):
+    check_csrf()
+    from reconcile_razorpay import resolve_item
+    resolution = (request.form.get("resolution") or "Resolved after manual review").strip()
+    resolution_code = (request.form.get("resolution_code") or "manual_review").strip()
+    if not resolution:
+        flash("Resolution note is required.", "error")
+        return redirect(url_for("admin.admin_reconciliation"))
+    if resolve_item(item_id, resolved_by=int(session["admin_id"]), resolution=resolution, resolution_code=resolution_code):
+        log_admin_action("reconciliation.item.resolve", "reconciliation_item", item_id, {"resolution": resolution[:500]})
+        flash("Reconciliation discrepancy marked resolved.", "success")
+    else:
+        flash("Reconciliation discrepancy was already resolved or no longer exists.", "error")
+    return redirect(url_for("admin.admin_reconciliation"))
+
+
 @admin_bp.route("/simulation-lab", methods=["GET", "POST"])
 @login_required
 @requires_permission("analytics.view")
 def admin_simulation_lab():
-    from governance_service import simulate_scenario
-    conn = db.get_db()
-    result = None
-    if request.method == "POST":
-        check_csrf()
-        scenario = (request.form.get("scenario") or "payment_outage").strip()
+    conn=db.get_db(); ensure_operations_lab_schema(conn)
+    result=None; report=None
+    if request.method=="POST":
+        check_csrf(); scenario=(request.form.get("scenario") or "payment_outage").strip()
         try:
-            scale = int(request.form.get("scale", "100"))
-            result = simulate_scenario(conn, admin_id=int(session["admin_id"]), scenario=scenario, scale=scale)
-            flash("Simulation completed. No real orders, payments, or inventory were changed.", "success")
-        except (ValueError, TypeError) as exc:
-            flash(str(exc), "error")
-    runs = conn.execute(
-        "SELECT id, label, parameters_json, results_json, status, created_at FROM simulation_runs ORDER BY created_at DESC LIMIT 30"
-    ).fetchall()
-    conn.close()
-    return render_template("admin/simulation_lab.html", result=result, runs=runs,
-                           scenarios=["payment_outage", "stockout", "refund_surge", "coupon_abuse"])
+            from governance_service import simulate_scenario
+            result=simulate_scenario(conn,admin_id=int(session["admin_id"]),scenario=scenario,scale=int(request.form.get("scale","100")))
+            report=simulation_report(conn,int(result["id"]))
+            flash("Simulation completed. No real orders, payments, or inventory were changed.","success")
+        except (ValueError,TypeError) as exc: flash(str(exc),"error")
+    runs=conn.execute("SELECT id,label,parameters_json,results_json,status,created_at FROM simulation_runs ORDER BY created_at DESC LIMIT 30").fetchall()
+    catalog=simulation_catalog(conn); conn.close()
+    return render_template("admin/simulation_lab.html",result=result,report=report,runs=runs,catalog=catalog,scenarios=[c["key"] for c in catalog])
 
+@admin_bp.route("/simulation-lab/runs/<int:run_id>", methods=["GET"])
+@login_required
+@requires_permission("analytics.view")
+def admin_simulation_report(run_id):
+    conn=db.get_db(); report=simulation_report(conn,run_id); conn.close()
+    if not report: abort(404)
+    return jsonify(report)
 
 @admin_bp.route("/training", methods=["GET", "POST"])
 @login_required
 @requires_permission("tickets.create")
 def admin_training():
-    scenarios = [
-        {"id": "double_charge", "title": "Customer reports a double charge",
-         "prompt": "A customer says their card was charged twice but only one order appears in the store. What do you do first?",
-         "best": ["check provider payment IDs", "reconcile", "do not refund blindly"]},
-        {"id": "late_delivery", "title": "Delivery is late",
-         "prompt": "An order has passed its expected delivery window. What is the first operational step?",
-         "best": ["check fulfillment", "check latest delivery event", "give customer concrete status"]},
-        {"id": "negative_stock", "title": "Inventory goes negative",
-         "prompt": "The dashboard reports negative inventory for a product. What should happen next?",
-         "best": ["stop uncontrolled selling", "investigate reservation/commit history", "record exception"]},
-        {"id": "refund_request", "title": "Large refund request",
-         "prompt": "A customer requests a very large refund. What should happen before money moves?",
-         "best": ["verify order and provider state", "follow approval policy", "do not duplicate refund"]},
+    conn=db.get_db(); ensure_operations_lab_schema(conn)
+    scenarios=[
+      {"id":"double_charge","title":"Customer reports a double charge","prompt":"A customer says their card was charged twice but only one order appears in the store.","best":["check provider payment IDs","reconcile","do not refund blindly"]},
+      {"id":"late_delivery","title":"Delivery is late","prompt":"An order has passed its expected delivery window. What is the first operational step?","best":["check fulfillment","check latest delivery event","give customer concrete status"]},
+      {"id":"negative_stock","title":"Inventory goes negative","prompt":"The dashboard reports negative inventory for a product. What should happen next?","best":["stop uncontrolled selling","investigate reservation/commit history","record exception"]},
+      {"id":"refund_request","title":"Large refund request","prompt":"A customer requests a very large refund. What should happen before money moves?","best":["verify order and provider state","follow approval policy","do not duplicate refund"]},
     ]
-    score = None
-    if request.method == "POST":
-        check_csrf()
-        sid = request.form.get("scenario")
-        answer = (request.form.get("answer") or "").strip().lower()
-        scenario = next((s for s in scenarios if s["id"] == sid), None)
-        if scenario:
-            hits = sum(1 for key in scenario["best"] if key in answer)
-            score = round(hits / len(scenario["best"]) * 100)
-            conn = db.get_db()
-            from governance_service import create_decision
-            create_decision(conn, admin_id=int(session["admin_id"]),
-                            title=f"Training: {scenario['title']}",
-                            decision=f"Score {score}/100. Response: {answer[:1000]}",
-                            reason="Staff training exercise", expected_result="Apply safe operational playbook before taking irreversible action.")
-            conn.close()
-            flash(f"Training exercise scored {score}/100. Review the recommended safe sequence below.", "success")
-    return render_template("admin/training.html", scenarios=scenarios, score=score)
+    score=None; attempt=None
+    if request.method=="POST":
+        check_csrf(); sid=request.form.get("scenario") or "double_charge"; answer=(request.form.get("answer") or "").strip(); rubric=next((x for x in scenarios if x["id"]==sid),None)
+        if rubric:
+            score=round(sum(1 for k in rubric["best"] if k in answer.lower())/len(rubric["best"])*100)
+            mapping={"double_charge":"payment_outage","late_delivery":"stockout","negative_stock":"stockout","refund_request":"refund_surge"}
+            attempt=record_training_attempt(conn,admin_id=int(session["admin_id"]),scenario_key=mapping.get(sid,"payment_outage"),answer=answer)
+            flash(f"Training exercise scored {score}/100. Attempt #{attempt['id']} recorded.","success")
+    recent=conn.execute("SELECT t.*,a.username admin_username FROM training_attempts t LEFT JOIN admin_users a ON a.id=t.admin_id ORDER BY t.created_at DESC LIMIT 50").fetchall()
+    summary=training_report(conn,admin_id=int(session["admin_id"])); conn.close()
+    return render_template("admin/training.html",scenarios=scenarios,score=score,attempt=attempt,recent=recent,summary=summary)
 
+@admin_bp.route("/training/report", methods=["GET"])
+@login_required
+@requires_permission("tickets.create")
+def admin_training_report():
+    conn=db.get_db(); report=training_report(conn); conn.close(); return jsonify(report)
 
 @admin_bp.route("/customers/<int:customer_id>/timeline", methods=["GET", "POST"])
 @login_required
 @requires_permission("orders.view")
 def admin_customer_timeline(customer_id):
-    from governance_service import customer_timeline, recommend_recovery_playbooks
+    from governance_service import customer_timeline, recommend_recovery_playbooks, recovery_action_history, record_recovery_action
     conn = db.get_db()
     timeline = customer_timeline(conn, customer_id)
     if not timeline:
         conn.close(); abort(404)
     if request.method == "POST":
         check_csrf()
+        action = (request.form.get("action") or "interaction").strip()
+        admin_id=int(session["admin_id"])
         from governance_service import log_support_interaction
-        log_support_interaction(conn, customer_id=customer_id, admin_id=int(session["admin_id"]),
+        if action == 'recovery_step':
+            playbook_key=(request.form.get('playbook_key') or '').strip()
+            step_index=int(request.form.get('step_index') or 0)
+            step_action=(request.form.get('step_action') or '').strip()
+            outcome=(request.form.get('outcome') or '').strip()
+            if not playbook_key or not step_action:
+                conn.close(); flash('Recovery step is incomplete.', 'error'); return redirect(url_for('admin.admin_customer_timeline', customer_id=customer_id))
+            record_recovery_action(conn, customer_id=customer_id, admin_id=admin_id, playbook_key=playbook_key, step_index=step_index, action=step_action, outcome=outcome)
+            log_support_interaction(conn, customer_id=customer_id, admin_id=admin_id, channel='recovery', subject=f'Recovery playbook: {playbook_key}', summary=step_action, outcome=outcome)
+            conn.close(); flash('Recovery step recorded in the customer history.', 'success'); return redirect(url_for('admin.admin_customer_timeline', customer_id=customer_id))
+        log_support_interaction(conn, customer_id=customer_id, admin_id=admin_id,
                                 channel=(request.form.get("channel") or "internal").strip(),
                                 subject=(request.form.get("subject") or "Support interaction").strip(),
                                 summary=(request.form.get("summary") or "").strip(),
@@ -2726,5 +3347,6 @@ def admin_customer_timeline(customer_id):
         flash("Customer interaction saved to the permanent customer timeline.", "success")
         return redirect(url_for("admin.admin_customer_timeline", customer_id=customer_id))
     playbooks = recommend_recovery_playbooks(timeline)
+    recovery_history = recovery_action_history(conn, customer_id)
     conn.close()
-    return render_template("admin/customer_timeline.html", timeline=timeline, playbooks=playbooks)
+    return render_template("admin/customer_timeline.html", timeline=timeline, playbooks=playbooks, recovery_history=recovery_history)

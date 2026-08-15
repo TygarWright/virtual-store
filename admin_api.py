@@ -785,10 +785,20 @@ def coupon_toggle(coupon_id):
 @api_admin_required
 @api_requires_permission("coupons.manage")
 def coupon_delete(coupon_id):
+    data = request.get_json(silent=True) or {}
     conn = db.get_db()
+    coupon = conn.execute("SELECT id, code FROM coupons WHERE id=?", (coupon_id,)).fetchone()
+    if not coupon:
+        conn.close(); return err("Coupon not found.", 404)
+    approval_id = int(data.get("approval_id")) if str(data.get("approval_id", "")).isdigit() else None
+    approval = request_or_validate_approval(
+        conn, action="promotion.delete", requested_by=int(g.admin_id), entity="coupon", entity_id=coupon_id,
+        reason=f"Delete promotion {coupon['code']}", metadata={"code": coupon["code"]}, approval_id=approval_id
+    )
+    if not approval["allowed"]:
+        conn.close(); return err(f"Second-person approval required. Approval #{approval['approval_id']} was created.", 409, approval_id=approval["approval_id"])
     conn.execute("DELETE FROM coupons WHERE id = ?", (coupon_id,))
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
     _invalidate_frontend_cache(catalog=True)
     return ok({"deleted": True})
 
@@ -1244,7 +1254,9 @@ def performance_metrics():
 def governance_approvals():
     conn = db.get_db()
     rows = conn.execute(
-        """SELECT a.*, u.username AS requester
+        """SELECT a.*, u.username AS requester,
+                  (SELECT COUNT(*) FROM approval_steps s WHERE s.approval_id=a.id AND s.status='pending') AS pending_steps,
+                  (SELECT COUNT(*) FROM approval_steps s WHERE s.approval_id=a.id AND s.status='approved') AS completed_steps
            FROM admin_approval_requests a JOIN admin_users u ON u.id=a.requested_by
            ORDER BY CASE a.status WHEN 'pending' THEN 0 ELSE 1 END, a.created_at DESC LIMIT 200"""
     ).fetchall()
@@ -1258,8 +1270,25 @@ def governance_approve(approval_id):
     from governance_service import approve
     conn = db.get_db()
     success = approve(conn, approval_id, approved_by=int(g.admin_id), note=(request.get_json(silent=True) or {}).get("note", ""))
+    if success:
+        status_row = conn.execute("SELECT status FROM admin_approval_requests WHERE id=?", (approval_id,)).fetchone()
+        steps = conn.execute("SELECT step_index, status, approved_by, approved_at, note FROM approval_steps WHERE approval_id=? ORDER BY step_index", (approval_id,)).fetchall()
+        conn.close()
+        return ok({"approved": True, "final": bool(status_row and status_row[0] == "approved"), "steps": [dict(r) for r in steps]})
     conn.close()
-    return ok({"approved": success}) if success else err("Approval unavailable or self-approval attempted.", 409)
+    return err("Approval unavailable, expired, already used, or self-approval attempted.", 409)
+
+
+@admin_api.route("/governance/approvals/<int:approval_id>", methods=["GET"])
+@api_requires_permission("admin.manage", "orders.refund")
+def governance_approval_detail(approval_id):
+    conn = db.get_db()
+    row = conn.execute("SELECT * FROM admin_approval_requests WHERE id=?", (approval_id,)).fetchone()
+    steps = conn.execute("SELECT step_index, status, approved_by, approved_at, note FROM approval_steps WHERE approval_id=? ORDER BY step_index", (approval_id,)).fetchall()
+    conn.close()
+    if not row:
+        return err("Approval not found.", 404)
+    return ok({"approval": dict(row), "steps": [dict(r) for r in steps]})
 
 
 @admin_api.route("/governance/approvals/<int:approval_id>/reject", methods=["POST"])
@@ -1270,6 +1299,84 @@ def governance_reject(approval_id):
     success = reject(conn, approval_id, rejected_by=int(g.admin_id), note=(request.get_json(silent=True) or {}).get("note", ""))
     conn.close()
     return ok({"rejected": success}) if success else err("Approval unavailable.", 409)
+
+
+@admin_api.route("/governance/approval-policies", methods=["GET"])
+@api_requires_permission("admin.manage")
+def governance_approval_policies():
+    conn = db.get_db()
+    rows = conn.execute("SELECT action, threshold_amount, required_approvals, require_two_person, approval_expiry_minutes, enabled, updated_at FROM high_risk_action_policies ORDER BY action").fetchall()
+    conn.close()
+    return ok({"policies": [dict(r) for r in rows]})
+
+
+@admin_api.route("/governance/approval-policies/<path:action>", methods=["PUT"])
+@api_requires_permission("admin.manage")
+def governance_approval_policy_update(action):
+    payload = request.get_json(silent=True) or {}
+    required = max(1, int(payload.get("required_approvals", 1)))
+    threshold = max(0, int(payload.get("threshold_amount", 0)))
+    expiry = max(1, int(payload.get("approval_expiry_minutes", 1440)))
+    enabled = 1 if bool(payload.get("enabled", True)) else 0
+    conn = db.get_db()
+    now = db.now()
+    conn.execute("""INSERT INTO high_risk_action_policies(action, threshold_amount, required_approvals, require_two_person, approval_expiry_minutes, enabled, updated_at, version)
+                   VALUES(?,?,?,?,?,?,?,1)
+                   ON CONFLICT(action) DO UPDATE SET threshold_amount=excluded.threshold_amount, required_approvals=excluded.required_approvals, require_two_person=excluded.require_two_person, approval_expiry_minutes=excluded.approval_expiry_minutes, enabled=excluded.enabled, updated_at=excluded.updated_at, version=high_risk_action_policies.version+1""", (action, threshold, required, 1 if required >= 2 else 0, expiry, enabled, now))
+    from backend_kernel import publish_event
+    publish_event(conn, topic="governance.approval_policy.updated", aggregate="approval_policy", aggregate_id=action, payload={"action": action, "threshold_amount": threshold, "required_approvals": required, "approval_expiry_minutes": expiry, "enabled": bool(enabled), "updated_by": int(g.admin_id)})
+    conn.commit(); conn.close()
+    return ok({"action": action, "required_approvals": required, "threshold_amount": threshold, "approval_expiry_minutes": expiry, "enabled": bool(enabled)})
+
+
+@admin_api.route("/governance/event-deliveries/retryable", methods=["GET"])
+@api_requires_permission("audit.view")
+def governance_event_deliveries_retryable():
+    consumer = str(request.args.get("consumer", "")).strip()
+    limit = max(1, min(200, int(request.args.get("limit", 100))))
+    from backend_kernel import retryable_event_deliveries
+    conn = db.get_db(); rows = retryable_event_deliveries(conn, consumer=consumer, limit=limit); conn.close()
+    return ok({"deliveries": [dict(r) for r in rows]})
+
+
+@admin_api.route("/governance/event-deliveries/dead-letter", methods=["GET"])
+@api_requires_permission("audit.view")
+def governance_event_deliveries_dead_letter():
+    limit = max(1, min(200, int(request.args.get("limit", 100))))
+    from backend_kernel import dead_letter_event_deliveries
+    conn = db.get_db(); rows = dead_letter_event_deliveries(conn, limit=limit); conn.close()
+    return ok({"deliveries": [dict(r) for r in rows]})
+
+
+@admin_api.route("/governance/event-deliveries", methods=["GET"])
+@api_requires_permission("audit.view")
+def governance_event_deliveries():
+    event_id = str(request.args.get("event_id", "")).strip()
+    consumer = str(request.args.get("consumer", "")).strip()
+    limit = max(1, min(200, int(request.args.get("limit", 100))))
+    clauses=[]; params=[]
+    if event_id: clauses.append("event_id=?"); params.append(event_id)
+    if consumer: clauses.append("consumer=?"); params.append(consumer)
+    sql="SELECT event_id, consumer, status, attempts, last_error, updated_at FROM domain_event_deliveries"
+    if clauses: sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY updated_at DESC LIMIT ?"; params.append(limit)
+    conn=db.get_db(); rows=conn.execute(sql, tuple(params)).fetchall(); conn.close()
+    return ok({"deliveries":[dict(r) for r in rows]})
+
+
+@admin_api.route("/governance/events", methods=["GET"])
+@api_requires_permission("audit.view")
+def governance_events():
+    topic = str(request.args.get("topic", "")).strip()
+    aggregate = str(request.args.get("aggregate", "")).strip()
+    limit = max(1, min(200, int(request.args.get("limit", 100))))
+    clauses=[]; params=[]
+    if topic: clauses.append("topic=?"); params.append(topic)
+    if aggregate: clauses.append("aggregate=?"); params.append(aggregate)
+    sql = "SELECT event_id, topic, aggregate, aggregate_id, payload_json, created_at FROM domain_events" + ((" WHERE " + " AND ".join(clauses)) if clauses else "") + " ORDER BY created_at DESC LIMIT ?"
+    params.append(limit)
+    conn = db.get_db(); rows = conn.execute(sql, tuple(params)).fetchall(); conn.close()
+    return ok({"events": [dict(r) for r in rows]})
 
 
 @admin_api.route("/governance/exceptions", methods=["GET"])
@@ -1336,6 +1443,26 @@ def governance_escalate_exceptions():
     conn = db.get_db(); count = escalate_overdue_exceptions(conn); conn.close()
     return ok({"escalated": count})
 
+
+@admin_api.route("/governance/reconciliation-runs", methods=["GET"])
+@api_requires_permission("audit.view")
+def governance_reconciliation_runs():
+    from reconcile_razorpay import recent_runs
+    return ok({"runs": recent_runs(30)})
+
+
+@admin_api.route("/governance/reconciliation-runs/<int:run_id>", methods=["GET"])
+@api_requires_permission("audit.view")
+def governance_reconciliation_run(run_id):
+    from reconcile_razorpay import run_items
+    return ok({"items": run_items(run_id)})
+
+
+@admin_api.route("/governance/reconciliation-aging", methods=["GET"])
+@api_requires_permission("audit.view")
+def governance_reconciliation_aging():
+    from reconcile_razorpay import aging_summary
+    return ok(aging_summary())
 
 @admin_api.route("/governance/razorpay-reconcile", methods=["POST"])
 @api_requires_permission("audit.view")
@@ -1538,3 +1665,145 @@ def governance_support_timeline(customer_id):
     ).fetchall()
     conn.close()
     return ok({'interactions': [dict(r) for r in rows]})
+
+# ============================================================= ANALYTICS MASTERY
+
+@admin_api.route('/analytics/funnel', methods=['POST'])
+@api_requires_permission('analytics.view')
+def analytics_funnel():
+    from analytics_mastery import funnel_report
+    payload = request.get_json(silent=True) or {}
+    steps = payload.get('steps') or []
+    conn = db.get_db()
+    try:
+        days = int(payload.get('days', 30))
+        report = funnel_report(conn, steps=steps, days=days)
+    except ValueError as exc:
+        return err(str(exc), 400)
+    finally:
+        conn.close()
+    return ok(report)
+
+
+@admin_api.route('/analytics/cohorts', methods=['GET'])
+@api_requires_permission('analytics.view')
+def analytics_cohorts():
+    from analytics_mastery import cohort_report
+    try:
+        days = int(request.args.get('days', 180))
+    except ValueError:
+        return err('days must be an integer', 400)
+    conn = db.get_db()
+    try:
+        report = cohort_report(conn, days=days)
+    finally:
+        conn.close()
+    return ok(report)
+
+
+@admin_api.route('/analytics/experiments/<int:experiment_id>', methods=['GET'])
+@api_requires_permission('analytics.view')
+def analytics_experiment(experiment_id):
+    from analytics_mastery import experiment_report
+    try:
+        days = int(request.args.get('days', 90))
+    except ValueError:
+        return err('days must be an integer', 400)
+    conn = db.get_db()
+    try:
+        report = experiment_report(conn, experiment_id, days=days)
+    except ValueError as exc:
+        return err(str(exc), 404)
+    finally:
+        conn.close()
+    return ok(report)
+
+
+# ============================================================= MASTERy ANALYTICS / MEMORY DEPTH
+
+@admin_api.route('/analytics/experiments/<int:experiment_id>/guardrails/history', methods=['GET'])
+@api_requires_permission('analytics.view')
+def analytics_experiment_guardrail_history(experiment_id):
+    from mastery_services import guardrail_history
+    try: days=int(request.args.get('days',90))
+    except ValueError: return err('days must be an integer',400)
+    conn=db.get_db()
+    try: return ok({'history':guardrail_history(conn,int(experiment_id),days=days)})
+    finally: conn.close()
+
+@admin_api.route('/analytics/experiments/<int:experiment_id>/guardrails', methods=['GET', 'POST'])
+@api_requires_permission('analytics.view')
+def analytics_experiment_guardrails(experiment_id):
+    from analytics_mastery import set_experiment_guardrail, evaluate_experiment_guardrails
+    conn = db.get_db()
+    try:
+        if request.method == 'POST':
+            if not has_permission(g.admin_id, 'analytics.manage') and not has_permission(g.admin_id, 'admin.manage'):
+                return err('Permission denied.', 403)
+            payload = request.get_json(silent=True) or {}
+            set_experiment_guardrail(conn, experiment_id=int(experiment_id), metric=str(payload.get('metric','')), comparator=str(payload.get('comparator','max_percent')), threshold=float(payload.get('threshold',0)), active=bool(payload.get('active',True)))
+        rows = conn.execute('SELECT * FROM experiment_guardrails WHERE experiment_id=? ORDER BY metric',(int(experiment_id),)).fetchall()
+        report = evaluate_experiment_guardrails(conn, int(experiment_id), days=int(request.args.get('days',90)), persist_history=(request.method == 'POST'))
+        return ok({'guardrails':[dict(r) for r in rows], 'evaluation':report})
+    except (ValueError, TypeError) as exc:
+        return err(str(exc), 400)
+    finally:
+        conn.close()
+
+@admin_api.route('/governance/memory/health', methods=['GET'])
+@api_requires_permission('admin.institutional_memory')
+def memory_health_api():
+    from mastery_services import memory_health
+    try: days=int(request.args.get('stale_days',180))
+    except ValueError: return err('stale_days must be an integer',400)
+    conn=db.get_db()
+    try: return ok(memory_health(conn, stale_days=days))
+    finally: conn.close()
+
+@admin_api.route('/governance/memory/<string:source_type>/<int:source_id>/related', methods=['GET'])
+@api_requires_permission('admin.institutional_memory')
+def memory_related_api(source_type, source_id):
+    from mastery_services import related_memory
+    try: limit=int(request.args.get('limit',12))
+    except ValueError: return err('limit must be an integer',400)
+    conn=db.get_db()
+    try: return ok({'related':related_memory(conn, source_type, int(source_id), limit=limit)})
+    finally: conn.close()
+
+# ============================================================= WORKFLOW OBSERVABILITY
+
+@admin_api.route('/workflows', methods=['GET'])
+@api_requires_permission('audit.view')
+def workflow_runs():
+    conn = db.get_db()
+    rows = conn.execute(
+        """SELECT workflow_id, workflow_type, aggregate_type, aggregate_id,
+                  status, current_step, attempt_count, compensation_status,
+                  error, created_at, updated_at, completed_at
+           FROM workflow_runs ORDER BY updated_at DESC LIMIT 100"""
+    ).fetchall()
+    conn.close()
+    return ok({'runs': [dict(r) for r in rows]})
+
+
+@admin_api.route('/workflows/<workflow_id>', methods=['GET'])
+@api_requires_permission('audit.view')
+def workflow_run_detail(workflow_id):
+    conn = db.get_db()
+    run = conn.execute("SELECT * FROM workflow_runs WHERE workflow_id=?", (workflow_id,)).fetchone()
+    if not run:
+        conn.close(); return err('workflow not found', 404)
+    steps = conn.execute("SELECT * FROM workflow_steps WHERE workflow_id=? ORDER BY step_index", (workflow_id,)).fetchall()
+    conn.close()
+    return ok({'run': dict(run), 'steps': [dict(s) for s in steps]})
+
+
+@admin_api.route("/governance/ledger", methods=["GET"])
+@api_requires_permission("audit.view")
+def governance_ledger():
+    conn = db.get_db()
+    limit = max(1, min(int(request.args.get("limit", 200)), 1000))
+    rows = conn.execute("SELECT entry_type, order_id, refund_id, provider_reference, amount, currency, occurred_at FROM financial_ledger ORDER BY occurred_at DESC, id DESC LIMIT ?", (limit,)).fetchall()
+    totals = conn.execute("SELECT COALESCE(SUM(CASE WHEN entry_type='sale' THEN amount ELSE 0 END),0) AS gross, COALESCE(SUM(CASE WHEN entry_type='refund' THEN amount ELSE 0 END),0) AS refunds FROM financial_ledger").fetchone()
+    conn.close()
+    return ok({"entries":[dict(r) for r in rows], "gross_sales": int(totals["gross"] or 0), "refunds": int(totals["refunds"] or 0), "net_sales": int(totals["gross"] or 0)-int(totals["refunds"] or 0)})

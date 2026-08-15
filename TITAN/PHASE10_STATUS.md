@@ -17,10 +17,11 @@
 - ⚠️ Real Razorpay test payment
 - ⚠️ Real Razorpay refund
 - ⚠️ Real webhook delivery and duplicate/replay behavior
-- ⚠️ Production migration rehearsal
+- ✅ Repository-level migration/restore rehearsal harness
 - ⚠️ Staging backup/restore rehearsal
 - ⚠️ Browser and real-device UX/accessibility verification
 - ⚠️ Load/performance verification
+- ✅ Repository-level concurrency/failure-injection harness
 - ⚠️ Production deployment verification
 - ⚠️ Rollback rehearsal
 

@@ -1,0 +1,64 @@
+{% extends "admin/base.html" %}
+{% block title %}Support Cockpit{% endblock %}
+{% block content %}
+<div class="admin-topbar titan-page-header">
+  <div><p class="titan-eyebrow">Operations</p><h1>Support Cockpit</h1><p class="admin-table__muted">One place to understand the customer, their orders and the active support context.</p></div>
+</div>
+<form method="GET" action="{{ url_for('admin.admin_support_cockpit') }}" class="titan-toolbar" role="search">
+  <label class="titan-visually-hidden" for="supportSearch">Search customer</label>
+  <input id="supportSearch" name="q" value="{{ q }}" class="admin-input titan-control" type="search" placeholder="Name, email or phone…" autocomplete="off">
+  <button class="admin-btn admin-btn--primary titan-control" type="submit">Search</button>
+  {% if q %}<a class="admin-btn admin-btn--ghost titan-control" href="{{ url_for('admin.admin_support_cockpit') }}">Clear</a>{% endif %}
+</form>
+
+{% if selected_order %}
+<section class="titan-surface titan-stack titan-support-order-focus" style="margin-top:1rem;padding:1rem;">
+  <div class="titan-cluster" style="justify-content:space-between"><div><p class="titan-eyebrow">Focused order</p><h2>{{ selected_order.order_ref }}</h2></div><a class="admin-btn admin-btn--primary titan-control" href="{{ url_for('admin.admin_order_detail', order_id=selected_order.id) }}">Open order</a></div>
+  <dl class="titan-definition-list"><div><dt>Product</dt><dd>{{ selected_order.product_name }}</dd></div><div><dt>Amount</dt><dd>{{ settings.currency_symbol }}{{ "{:,}".format(selected_order.amount or 0) }}</dd></div><div><dt>Payment</dt><dd>{{ selected_order.payment_state }}</dd></div><div><dt>Order state</dt><dd>{{ selected_order.order_state }}</dd></div><div><dt>Refunded</dt><dd>{{ settings.currency_symbol }}{{ "{:,}".format(selected_order.refunded_amount or 0) }}</dd></div></dl>
+</section>
+{% endif %}
+
+{% if search_results %}
+<section class="titan-surface titan-stack" style="margin-top:1rem;padding:1rem;">
+  <div><strong>Customers</strong><p class="titan-muted">Select a customer to open their operating context.</p></div>
+  <div class="table-wrap"><table class="table"><thead><tr><th>Customer</th><th>Contact</th><th>Joined</th><th></th></tr></thead><tbody>
+  {% for c in search_results %}<tr><td><strong>{{ c.name or 'Unnamed customer' }}</strong><br><small class="admin-table__muted">#{{ c.id }}</small></td><td>{{ c.email or '—' }}{% if c.phone %}<br><small class="admin-table__muted">{{ c.phone }}</small>{% endif %}</td><td>{{ c.created_at or '—' }}</td><td><a class="text-link" href="{{ url_for('admin.admin_support_cockpit', customer_id=c.id) }}">Open context</a></td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endif %}
+
+{% if selected_customer %}
+<section class="titan-support-grid" style="margin-top:1rem;">
+  <article class="titan-surface titan-stack" style="padding:1rem;">
+    <div class="titan-cluster" style="justify-content:space-between"><div><p class="titan-eyebrow">Customer</p><h2>{{ selected_customer.name or 'Unnamed customer' }}</h2></div><a class="admin-btn admin-btn--ghost titan-control" href="{{ url_for('admin.admin_customer_timeline', customer_id=selected_customer.id) }}">Timeline</a></div>
+    <dl class="titan-definition-list"><div><dt>Email</dt><dd>{{ selected_customer.email or '—' }}</dd></div><div><dt>Phone</dt><dd>{{ selected_customer.phone or '—' }}</dd></div><div><dt>Joined</dt><dd>{{ selected_customer.created_at or '—' }}</dd></div></dl>
+  </article>
+  <article class="titan-surface titan-stack" style="padding:1rem;">
+    <div class="titan-cluster" style="justify-content:space-between"><div><p class="titan-eyebrow">Actions</p><h2>Discuss / work</h2></div></div>
+    <div class="titan-cluster"><a class="admin-btn admin-btn--primary titan-control" href="{{ url_for('admin.admin_team_hub_context', type='customer', id=selected_customer.id, title='Customer · ' ~ (selected_customer.name or selected_customer.email)) }}">Discuss with team</a><a class="admin-btn admin-btn--ghost titan-control" href="{{ url_for('admin.admin_tickets') }}">Open tickets</a></div>
+    <p class="titan-muted">Keep conversation in Team Hub; use tickets for accountable work and escalation.</p>
+  </article>
+</section>
+
+<section class="titan-surface titan-stack" style="margin-top:1rem;padding:1rem;">
+  <div><p class="titan-eyebrow">Commerce context</p><h2>Orders</h2></div>
+  {% if customer_orders %}<div class="table-wrap"><table class="table"><thead><tr><th>Order</th><th>Product</th><th>Amount</th><th>Payment</th><th>Order state</th><th></th></tr></thead><tbody>
+  {% for o in customer_orders %}<tr><td><strong>{{ o.order_ref }}</strong><br><small class="admin-table__muted">{{ o.created_at }}</small></td><td>{{ o.product_name }}</td><td>{{ settings.currency_symbol }}{{ "{:,}".format(o.amount or 0) }}</td><td>{{ o.payment_state }}</td><td>{{ o.order_state }}</td><td><a class="text-link" href="{{ url_for('admin.admin_order_detail', order_id=o.id) }}">Open</a></td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<div class="empty-state"><h3>No orders found</h3><p>This customer has no linked orders yet.</p></div>{% endif %}
+</section>
+
+<section class="titan-surface titan-stack" style="margin-top:1rem;padding:1rem;">
+  <div><p class="titan-eyebrow">Support context</p><h2>Tickets referencing this customer</h2></div>
+  {% if customer_tickets %}<div class="table-wrap"><table class="table"><thead><tr><th>Ticket</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>{% for t in customer_tickets %}<tr><td><strong>#{{ t.id }}</strong> — {{ t.title }}</td><td>{{ t.status }}</td><td>{{ t.created_at }}</td><td><a class="text-link" href="{{ url_for('admin.admin_tickets') }}">Open support</a></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state"><h3>No matching tickets</h3><p>Start a ticket only when the issue needs accountable work.</p></div>{% endif %}
+</section>
+
+<section class="titan-surface titan-stack" style="margin-top:1rem;padding:1rem;">
+  <div class="titan-cluster" style="justify-content:space-between"><div><p class="titan-eyebrow">Team context</p><h2>Conversations about this customer</h2></div><a class="admin-btn admin-btn--ghost titan-control" href="{{ url_for('admin.admin_team_hub_context', type='customer', id=selected_customer.id, title='Customer · ' ~ (selected_customer.name or selected_customer.email)) }}">Open Team Hub</a></div>
+  {% if customer_context_conversations %}<div class="table-wrap"><table class="table"><thead><tr><th>Conversation</th><th>Latest message</th><th>Updated</th><th></th></tr></thead><tbody>
+  {% for c in customer_context_conversations %}<tr><td><strong>{{ c.title }}</strong></td><td>{{ c.last_message or 'No messages yet.' }}</td><td>{{ c.updated_at }}</td><td><a class="text-link" href="{{ url_for('admin.admin_team_hub', conversation=c.id) }}">Open</a></td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<div class="empty-state"><h3>No team conversation yet</h3><p>Use “Discuss with team” to create the durable collaboration context for this customer.</p></div>{% endif %}
+</section>
+{% else %}
+<div class="empty-state titan-surface" style="margin-top:1rem;padding:2rem;"><h2>Choose a customer</h2><p>Search above to bring together customer history, orders and support context.</p></div>
+{% endif %}
+{% endblock %}

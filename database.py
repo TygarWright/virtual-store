@@ -373,11 +373,18 @@ MIGRATIONS = [
     # ---- Ticket reply attachments ----
     "ALTER TABLE admin_ticket_replies ADD COLUMN attachment_name TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE admin_ticket_replies ADD COLUMN attachment_path TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE workflow_runs ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE workflow_runs ADD COLUMN compensation_status TEXT NOT NULL DEFAULT 'not_needed'",
+    "ALTER TABLE workflow_runs ADD COLUMN last_attempt_at TEXT",
+    "ALTER TABLE workflow_runs ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 3",
     "ALTER TABLE orders ADD COLUMN inventory_reservation_id TEXT",
     "ALTER TABLE business_exceptions ADD COLUMN assigned_to INTEGER REFERENCES admin_users(id)",
     "ALTER TABLE business_exceptions ADD COLUMN due_at TEXT",
     "ALTER TABLE business_exceptions ADD COLUMN escalated_at TEXT",
     "ALTER TABLE business_exceptions ADD COLUMN escalation_reason TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE reconciliation_items ADD COLUMN resolution TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE reconciliation_items ADD COLUMN resolved_by INTEGER REFERENCES admin_users(id)",
+    "ALTER TABLE reconciliation_items ADD COLUMN resolved_at TEXT",
     "ALTER TABLE admin_tickets ADD COLUMN scope_type TEXT NOT NULL DEFAULT 'private'",
     "ALTER TABLE admin_tickets ADD COLUMN target_role TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE admin_tickets ADD COLUMN target_admin_id INTEGER",
@@ -388,9 +395,51 @@ MIGRATIONS = [
     "CREATE TABLE IF NOT EXISTS team_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL REFERENCES team_conversations(id) ON DELETE CASCADE, sender_admin_id INTEGER NOT NULL REFERENCES admin_users(id), body TEXT NOT NULL, created_at TEXT NOT NULL)",
     "CREATE INDEX IF NOT EXISTS idx_team_messages_conversation ON team_messages(conversation_id, id)",
     "CREATE TABLE IF NOT EXISTS team_reads (conversation_id INTEGER NOT NULL REFERENCES team_conversations(id) ON DELETE CASCADE, admin_id INTEGER NOT NULL REFERENCES admin_users(id), last_message_id INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(conversation_id, admin_id))",
+    "ALTER TABLE decision_journal ADD COLUMN lesson TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE decision_journal ADD COLUMN reviewed_by INTEGER",
+    "ALTER TABLE decision_journal ADD COLUMN effectiveness TEXT NOT NULL DEFAULT 'unreviewed'",
+    "ALTER TABLE decision_journal ADD COLUMN effectiveness_score INTEGER",
+    "ALTER TABLE decision_journal ADD COLUMN review_due_at TEXT",
+    "ALTER TABLE experiments ADD COLUMN conclusion TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE experiments ADD COLUMN conclusion_by INTEGER",
+    "ALTER TABLE experiments ADD COLUMN guardrails_passed INTEGER NOT NULL DEFAULT 1",
 ]
 
 SCHEMA_EXTRA = """
+  CREATE TABLE IF NOT EXISTS workflow_runs (
+      workflow_id TEXT PRIMARY KEY,
+      workflow_type TEXT NOT NULL,
+      aggregate_type TEXT NOT NULL,
+      aggregate_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      current_step INTEGER NOT NULL DEFAULT 0,
+      context_json TEXT NOT NULL DEFAULT '{}',
+      error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      completed_at TEXT,
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      last_attempt_at TEXT,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      compensation_status TEXT NOT NULL DEFAULT 'not_needed'
+  );
+
+  CREATE TABLE IF NOT EXISTS workflow_steps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workflow_id TEXT NOT NULL REFERENCES workflow_runs(workflow_id) ON DELETE CASCADE,
+      step_index INTEGER NOT NULL,
+      step_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      result_json TEXT NOT NULL DEFAULT '{}',
+      error TEXT NOT NULL DEFAULT '',
+      started_at TEXT,
+      completed_at TEXT,
+      UNIQUE(workflow_id, step_index)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_workflow_runs_status_updated ON workflow_runs(status, updated_at);
+  CREATE INDEX IF NOT EXISTS idx_workflow_steps_workflow_status ON workflow_steps(workflow_id, status, step_index);
+
   CREATE TABLE IF NOT EXISTS product_files (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -615,6 +664,36 @@ SCHEMA_EXTRA = """
   );
   CREATE INDEX IF NOT EXISTS idx_exceptions_status_severity ON business_exceptions(status, severity, created_at);
 
+  CREATE TABLE IF NOT EXISTS financial_ledger (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entry_key TEXT NOT NULL UNIQUE,
+      entry_type TEXT NOT NULL,
+      order_id INTEGER REFERENCES orders(id),
+      refund_id INTEGER REFERENCES order_refunds(id),
+      provider TEXT NOT NULL DEFAULT 'razorpay',
+      provider_reference TEXT NOT NULL DEFAULT '',
+      amount INTEGER NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'INR',
+      occurred_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}'
+  );
+  CREATE INDEX IF NOT EXISTS idx_financial_ledger_order ON financial_ledger(order_id, occurred_at);
+  CREATE INDEX IF NOT EXISTS idx_financial_ledger_type ON financial_ledger(entry_type, occurred_at);
+
+  CREATE TABLE IF NOT EXISTS financial_ledger_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      gross_sales INTEGER NOT NULL DEFAULT 0,
+      refunds INTEGER NOT NULL DEFAULT 0,
+      net_sales INTEGER NOT NULL DEFAULT 0,
+      ledger_entries INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      UNIQUE(period_start, period_end)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ledger_snapshots_period ON financial_ledger_snapshots(period_start, period_end);
+
   CREATE TABLE IF NOT EXISTS financial_reconciliation (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       period_start TEXT NOT NULL,
@@ -649,6 +728,8 @@ SCHEMA_EXTRA = """
       reason TEXT NOT NULL DEFAULT '',
       expected_result TEXT NOT NULL DEFAULT '',
       outcome TEXT NOT NULL DEFAULT '',
+      lesson TEXT NOT NULL DEFAULT '',
+      reviewed_by INTEGER REFERENCES admin_users(id),
       created_at TEXT NOT NULL,
       reviewed_at TEXT
   );
@@ -878,6 +959,17 @@ def _ensure_backend_kernel_schema(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_domain_events_topic_created ON domain_events(topic, created_at)")
     conn.execute("CREATE TABLE IF NOT EXISTS idempotency_keys (id INTEGER PRIMARY KEY AUTOINCREMENT, namespace TEXT NOT NULL, idempotency_key TEXT NOT NULL, request_hash TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'processing', result_json TEXT NOT NULL DEFAULT '{}', expires_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(namespace,idempotency_key))")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_idempotency_expiry ON idempotency_keys(expires_at)")
+    conn.execute("CREATE TABLE IF NOT EXISTS approval_steps (id INTEGER PRIMARY KEY AUTOINCREMENT, approval_id INTEGER NOT NULL REFERENCES admin_approval_requests(id) ON DELETE CASCADE, step_index INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', approved_by INTEGER REFERENCES admin_users(id), note TEXT NOT NULL DEFAULT '', approved_at TEXT, UNIQUE(approval_id, step_index))")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_approval_steps_lookup ON approval_steps(approval_id, step_index, status)")
+    conn.execute("CREATE TABLE IF NOT EXISTS domain_event_consumers (consumer_name TEXT PRIMARY KEY, last_created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)")
+    # Older deployments: add the policy column without trusting migration bookkeeping.
+    try:
+        conn.execute("SELECT required_approvals FROM high_risk_action_policies LIMIT 0")
+    except Exception:
+        try:
+            conn.execute("ALTER TABLE high_risk_action_policies ADD COLUMN required_approvals INTEGER NOT NULL DEFAULT 1")
+        except Exception:
+            pass
     conn.commit()
 
 
@@ -924,6 +1016,7 @@ def ensure_business_exception_columns(conn):
     against the live connection and commits the additive DDL before returning.
     """
     _ensure_business_exception_columns(conn)
+    ensure_round45_schema(conn)
     try:
         conn.commit()
     except Exception:
@@ -988,6 +1081,7 @@ def _apply_migrations(conn):
     # applied even though the DDL did not persist.
     _ensure_backend_kernel_schema(conn)
     _ensure_business_exception_columns(conn)
+    ensure_round45_schema(conn)
     try:
         try:
             conn.execute("SELECT integrity_hash FROM admin_audit_log LIMIT 0")
@@ -1370,7 +1464,95 @@ class _TursoCursor:
         return row
 
 
+
+# Round 19: mastery stack operations and analytics tables.
+SCHEMA_EXTRA_ROUND19 = """
+  CREATE TABLE IF NOT EXISTS team_message_pins (
+      message_id INTEGER PRIMARY KEY REFERENCES team_messages(id) ON DELETE CASCADE,
+      pinned_by INTEGER NOT NULL REFERENCES admin_users(id),
+      pinned_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS team_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      admin_id INTEGER NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+      conversation_id INTEGER REFERENCES team_conversations(id) ON DELETE CASCADE,
+      message_id INTEGER REFERENCES team_messages(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL DEFAULT 'mention',
+      title TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL DEFAULT '',
+      read_at TEXT,
+      created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_team_notifications_admin_read ON team_notifications(admin_id, read_at, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS admin_presence (
+      admin_id INTEGER PRIMARY KEY REFERENCES admin_users(id) ON DELETE CASCADE,
+      state TEXT NOT NULL DEFAULT 'offline',
+      last_seen_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS feature_flags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      key TEXT NOT NULL UNIQUE,
+      description TEXT NOT NULL DEFAULT '',
+      enabled INTEGER NOT NULL DEFAULT 0,
+      rollout_percent INTEGER NOT NULL DEFAULT 0,
+      updated_by INTEGER REFERENCES admin_users(id),
+      updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS experiments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      key TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      variants_json TEXT NOT NULL DEFAULT '[]',
+      allocation_json TEXT NOT NULL DEFAULT '{}',
+      primary_metric TEXT NOT NULL DEFAULT '',
+      started_at TEXT,
+      ended_at TEXT,
+      created_by INTEGER REFERENCES admin_users(id),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS experiment_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      experiment_id INTEGER NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
+      subject_key TEXT NOT NULL,
+      variant TEXT NOT NULL,
+      assigned_at TEXT NOT NULL,
+      UNIQUE(experiment_id, subject_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS experiment_guardrails (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      experiment_id INTEGER NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
+      metric TEXT NOT NULL,
+      comparator TEXT NOT NULL DEFAULT 'max_percent',
+      threshold REAL NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      UNIQUE(experiment_id, metric)
+  );
+  CREATE INDEX IF NOT EXISTS idx_experiment_guardrails_experiment ON experiment_guardrails(experiment_id);
+
+  CREATE TABLE IF NOT EXISTS institutional_memory_index (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_type TEXT NOT NULL,
+      source_id INTEGER NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL DEFAULT '',
+      keywords TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(source_type, source_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_memory_index_source ON institutional_memory_index(source_type, source_id);
+"""
+
 def init_db():
+    ensure_round18_schema(get_db())
+    ensure_round19_schema(get_db())
+    ensure_round22_schema(get_db())
     conn = get_db()
     # The libsql package raises ValueError (not sqlite3.OperationalError) for
     # SQL errors, so catch both to keep migrations idempotent on either backend.
@@ -1419,6 +1601,7 @@ def init_db():
         ('promotion.create.percent', 20, 1, 1440, 1),
         ('promotion.create.flat', 500, 1, 1440, 1),
         ('inventory.adjust', 10, 1, 1440, 1),
+        ('promotion.delete', 0, 1, 1440, 1),
     ]
     for action, threshold_amount, two_person, expiry_minutes, enabled in default_policies:
         conn.execute(
@@ -1476,5 +1659,287 @@ def new_order_ref():
     return f"ORD-{suffix}"
 
 
+def ensure_round19_schema(conn):
+    for stmt in SCHEMA_EXTRA_ROUND19.split(';'):
+        stmt = stmt.strip()
+        if stmt:
+            conn.execute(stmt)
+    conn.commit()
+
 def now():
     return datetime.now(timezone.utc).isoformat()
+
+# Round 18: persisted reconciliation history/discrepancy records.
+SCHEMA_EXTRA_ROUND18 = """
+  CREATE TABLE IF NOT EXISTS reconciliation_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      provider TEXT NOT NULL DEFAULT 'internal',
+      mode TEXT NOT NULL DEFAULT 'scheduled',
+      status TEXT NOT NULL DEFAULT 'completed',
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      scanned INTEGER NOT NULL DEFAULT 0,
+      repaired INTEGER NOT NULL DEFAULT 0,
+      mismatches INTEGER NOT NULL DEFAULT 0,
+      summary_json TEXT NOT NULL DEFAULT '{}',
+      created_by INTEGER REFERENCES admin_users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_reconciliation_runs_created ON reconciliation_runs(started_at DESC);
+
+  CREATE TABLE IF NOT EXISTS reconciliation_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id INTEGER NOT NULL REFERENCES reconciliation_runs(id) ON DELETE CASCADE,
+      severity TEXT NOT NULL DEFAULT 'info',
+      code TEXT NOT NULL,
+      entity TEXT NOT NULL DEFAULT '',
+      entity_id INTEGER,
+      title TEXT NOT NULL,
+      details TEXT NOT NULL DEFAULT '',
+      resolved INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_reconciliation_items_run ON reconciliation_items(run_id, severity, resolved);
+"""
+
+def ensure_round18_schema(conn):
+    for stmt in SCHEMA_EXTRA_ROUND18.split(';'):
+        stmt = stmt.strip()
+        if stmt:
+            conn.execute(stmt)
+    conn.commit()
+
+SCHEMA_EXTRA_ROUND24 = """
+  ALTER TABLE reconciliation_items ADD COLUMN resolution TEXT NOT NULL DEFAULT '';
+  ALTER TABLE reconciliation_items ADD COLUMN resolved_by INTEGER;
+  ALTER TABLE reconciliation_items ADD COLUMN resolved_at TEXT;
+  CREATE INDEX IF NOT EXISTS idx_reconciliation_items_status ON reconciliation_items(run_id, resolved, id);
+"""
+
+SCHEMA_EXTRA_ROUND29 = """
+  ALTER TABLE team_conversations ADD COLUMN context_type TEXT NOT NULL DEFAULT '';
+  ALTER TABLE team_conversations ADD COLUMN context_id INTEGER;
+  CREATE INDEX IF NOT EXISTS idx_team_conversations_context ON team_conversations(context_type, context_id);
+"""
+
+
+
+# Round 42: event-spine delivery and richer team collaboration.
+SCHEMA_EXTRA_ROUND42 = """
+  CREATE TABLE IF NOT EXISTS domain_event_deliveries (
+      event_id TEXT NOT NULL REFERENCES domain_events(event_id) ON DELETE CASCADE,
+      consumer TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY(event_id, consumer)
+  );
+  CREATE INDEX IF NOT EXISTS idx_domain_event_deliveries_status ON domain_event_deliveries(status, updated_at DESC);
+  ALTER TABLE team_messages ADD COLUMN parent_message_id INTEGER REFERENCES team_messages(id) ON DELETE SET NULL;
+  CREATE INDEX IF NOT EXISTS idx_team_messages_parent ON team_messages(parent_message_id, id);
+  CREATE TABLE IF NOT EXISTS team_message_reactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id INTEGER NOT NULL REFERENCES team_messages(id) ON DELETE CASCADE,
+      admin_id INTEGER NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+      reaction TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(message_id, admin_id, reaction)
+  );
+  CREATE INDEX IF NOT EXISTS idx_team_message_reactions_message ON team_message_reactions(message_id);
+"""
+
+def ensure_round42_schema(conn):
+    for stmt in SCHEMA_EXTRA_ROUND42.split(';'):
+        stmt=stmt.strip()
+        if not stmt:
+            continue
+        try:
+            conn.execute(stmt)
+        except Exception as exc:
+            msg=str(exc).lower()
+            if 'duplicate column' not in msg and 'already exists' not in msg:
+                raise
+    conn.commit()
+
+
+# Round 43: event-delivery retry/dead-letter controls.
+SCHEMA_EXTRA_ROUND43 = """
+  ALTER TABLE domain_event_deliveries ADD COLUMN available_at TEXT;
+  ALTER TABLE domain_event_deliveries ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 5;
+  ALTER TABLE domain_event_deliveries ADD COLUMN delivered_at TEXT;
+  CREATE INDEX IF NOT EXISTS idx_domain_event_deliveries_available ON domain_event_deliveries(status, available_at);
+"""
+
+def ensure_round43_schema(conn):
+    for stmt in SCHEMA_EXTRA_ROUND43.split(';'):
+        stmt=stmt.strip()
+        if not stmt:
+            continue
+        try:
+            conn.execute(stmt)
+        except Exception as exc:
+            msg=str(exc).lower()
+            if 'duplicate column' not in msg and 'already exists' not in msg and 'already exists' not in msg:
+                raise
+    conn.execute("UPDATE domain_event_deliveries SET available_at=COALESCE(available_at, updated_at) WHERE available_at IS NULL")
+    conn.commit()
+
+def ensure_round29_schema(conn):
+    for stmt in SCHEMA_EXTRA_ROUND29.split(';'):
+        stmt=stmt.strip()
+        if not stmt:
+            continue
+        try:
+            conn.execute(stmt)
+        except Exception as exc:
+            msg=str(exc).lower()
+            if 'duplicate column' not in msg and 'already exists' not in msg:
+                raise
+    conn.commit()
+
+SCHEMA_EXTRA_ROUND25 = """
+  CREATE TABLE IF NOT EXISTS observability_alerts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trace_id TEXT NOT NULL DEFAULT '',
+      alert_type TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'medium',
+      title TEXT NOT NULL,
+      details TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TEXT NOT NULL,
+      resolved_at TEXT,
+      resolved_by INTEGER REFERENCES admin_users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_obs_alerts_status ON observability_alerts(status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_obs_alerts_trace ON observability_alerts(trace_id, created_at DESC);
+  ALTER TABLE workflow_runs ADD COLUMN trace_id TEXT;
+  ALTER TABLE workflow_runs ADD COLUMN last_attempt_at TEXT;
+  ALTER TABLE workflow_runs ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 3;
+  CREATE INDEX IF NOT EXISTS idx_workflow_trace ON workflow_runs(trace_id, updated_at DESC);
+"""
+
+SCHEMA_EXTRA_ROUND45 = """
+  ALTER TABLE admin_approval_requests ADD COLUMN policy_version INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE admin_approval_requests ADD COLUMN policy_snapshot_json TEXT NOT NULL DEFAULT '{}';
+  ALTER TABLE high_risk_action_policies ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+  CREATE TABLE IF NOT EXISTS decision_review_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      decision_id INTEGER NOT NULL REFERENCES decision_journal(id) ON DELETE CASCADE,
+      reviewed_by INTEGER REFERENCES admin_users(id),
+      outcome TEXT NOT NULL DEFAULT '',
+      lesson TEXT NOT NULL DEFAULT '',
+      future_recommendation TEXT NOT NULL DEFAULT '',
+      effectiveness TEXT NOT NULL DEFAULT 'inconclusive',
+      effectiveness_score INTEGER,
+      created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_decision_review_history_decision ON decision_review_history(decision_id, created_at DESC);
+  CREATE TABLE IF NOT EXISTS institutional_memory_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_type TEXT NOT NULL,
+      source_id INTEGER NOT NULL,
+      related_type TEXT NOT NULL,
+      related_id INTEGER NOT NULL,
+      relation TEXT NOT NULL DEFAULT 'related',
+      score INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      UNIQUE(source_type, source_id, related_type, related_id, relation)
+  );
+  CREATE INDEX IF NOT EXISTS idx_memory_links_source ON institutional_memory_links(source_type, source_id, score DESC);
+
+  ALTER TABLE reconciliation_items ADD COLUMN due_at TEXT;
+  ALTER TABLE reconciliation_items ADD COLUMN resolution_code TEXT NOT NULL DEFAULT '';
+  ALTER TABLE reconciliation_items ADD COLUMN signed_off_by INTEGER;
+  ALTER TABLE reconciliation_items ADD COLUMN signed_off_at TEXT;
+  CREATE INDEX IF NOT EXISTS idx_reconciliation_items_due ON reconciliation_items(resolved, due_at, severity);
+"""
+
+
+
+SCHEMA_EXTRA_ROUND48 = """
+  CREATE TABLE IF NOT EXISTS reconciliation_locks (
+      provider TEXT PRIMARY KEY,
+      acquired_until TEXT NOT NULL,
+      acquired_at TEXT NOT NULL,
+      acquired_by INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_reconciliation_locks_until ON reconciliation_locks(acquired_until);
+"""
+
+def ensure_round48_schema(conn):
+    for stmt in SCHEMA_EXTRA_ROUND48.split(';'):
+        stmt=stmt.strip()
+        if stmt:
+            conn.execute(stmt)
+    conn.commit()
+
+
+def ensure_round45_schema(conn):
+    for stmt in SCHEMA_EXTRA_ROUND45.split(';'):
+        stmt = stmt.strip()
+        if not stmt:
+            continue
+        try:
+            conn.execute(stmt)
+        except Exception as exc:
+            msg=str(exc).lower()
+            if 'duplicate column' not in msg and 'already exists' not in msg:
+                raise
+    conn.commit()
+
+def ensure_round25_schema(conn):
+    for stmt in SCHEMA_EXTRA_ROUND25.split(';'):
+        stmt=stmt.strip()
+        if not stmt:
+            continue
+        try:
+            conn.execute(stmt)
+        except Exception as exc:
+            msg=str(exc).lower()
+            if 'duplicate column' not in msg and 'already exists' not in msg:
+                raise
+    conn.commit()
+
+
+def ensure_round24_schema(conn):
+    for stmt in SCHEMA_EXTRA_ROUND24.split(';'):
+        stmt = stmt.strip()
+        if not stmt:
+            continue
+        try:
+            conn.execute(stmt)
+        except Exception as exc:
+            msg = str(exc).lower()
+            if 'duplicate column' not in msg and 'already exists' not in msg:
+                raise
+    conn.commit()
+
+
+def ensure_round22_schema(conn):
+    for stmt in SCHEMA_EXTRA_ROUND22.split(';'):
+        stmt = stmt.strip()
+        if stmt:
+            conn.execute(stmt)
+    conn.commit()
+
+# Round 22: correlated observability spans.
+SCHEMA_EXTRA_ROUND22 = """
+  CREATE TABLE IF NOT EXISTS observability_spans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trace_id TEXT NOT NULL,
+      span_id TEXT NOT NULL UNIQUE,
+      parent_span_id TEXT,
+      kind TEXT NOT NULL,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'ok',
+      started_at TEXT NOT NULL,
+      ended_at TEXT,
+      duration_ms REAL,
+      request_id TEXT,
+      actor_id INTEGER,
+      attributes_json TEXT NOT NULL DEFAULT '{}',
+      error TEXT NOT NULL DEFAULT ''
+  );
+  CREATE INDEX IF NOT EXISTS idx_obs_trace ON observability_spans(trace_id, started_at);
+  CREATE INDEX IF NOT EXISTS idx_obs_recent ON observability_spans(started_at DESC);
+"""

@@ -1,0 +1,7 @@
+{% extends "admin/base.html" %}
+{% block title %}Feature Flags{% endblock %}
+{% block content %}
+<div class="admin-page-header"><div><h1>Feature Flags</h1><p class="text-muted">Control rollout without redeploying the application.</p></div></div>
+<div class="admin-card"><form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="form-grid"><input class="form-input" name="key" placeholder="flag.key" required><input class="form-input" name="description" placeholder="Description"><input class="form-input" type="number" name="rollout_percent" min="0" max="100" value="0" placeholder="Rollout %"><label><input type="checkbox" name="enabled" value="1"> Enabled</label></div><button class="admin-btn admin-btn--primary" type="submit">Save flag</button></form></div>
+<div class="admin-card"><table class="admin-table"><thead><tr><th>Key</th><th>Status</th><th>Rollout</th><th>Updated</th></tr></thead><tbody>{% for f in flags %}<tr><td>{{ f.key }}</td><td>{{ 'Enabled' if f.enabled else 'Disabled' }}</td><td>{{ f.rollout_percent }}%</td><td>{{ f.updated_at[:16].replace('T',' ') }}</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

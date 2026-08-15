@@ -51,7 +51,7 @@ from phase2_services import (
 
 # We'll create the blueprint
 from extensions import limiter, csrf
-from governance_service import coupon_discount_with_margin
+from governance_service import coupon_discount_with_margin, cart_coupon_margin
 from payment.inventory import reserve_stock_batch, release_stock, commit_stock
 from intelligence_service import rank_products, get_recommendations, get_personalized_recommendations, record_event
 
@@ -785,7 +785,7 @@ def api_create_order():
     conn.commit()
 
     if testing_mode:
-        _confirm_order_payment(conn, order, order_items, payment_mode="test")
+        confirm_order_payment_durable(conn, order=order, order_items=order_items, payment_mode="test", confirm_callable=_confirm_order_payment)
         return jsonify({
             "test_mode": True,
             "payment_mode": "test",
@@ -1200,12 +1200,12 @@ def api_cart_apply_coupon():
     if coupon["usage_limit"] is not None and coupon["used_count"] >= coupon["usage_limit"]:
         return jsonify({"error": "That coupon has already been fully redeemed."}), 400
 
-    if coupon["discount_type"] == "percent":
-        discount = int(round(subtotal * coupon["discount_value"] / 100))
-    else:
-        discount = coupon["discount_value"]
-    discount = max(0, min(discount, subtotal - 1 if subtotal > 0 else 0))
-    final_total = subtotal - discount
+    margin = cart_coupon_margin(items=items, subtotal=subtotal, discount_type=coupon["discount_type"], discount_value=int(coupon["discount_value"] or 0))
+    requested = margin["requested_discount"]
+    if requested > margin["safe_discount"] and any(int((it["product"].get("cost_price") or 0)) > 0 for it in items):
+        return jsonify({"error": "That coupon exceeds the cart's protected minimum margin."}), 400
+    discount = margin["safe_discount"]
+    final_total = margin["final_price"]
     return jsonify({"success": True, "discount_amount": discount, "final_price": final_total, "code": coupon["code"]})
 
 
@@ -1275,12 +1275,13 @@ def api_cart_create_order():
                 conn.close()
                 return jsonify({"error": "You've already used this coupon."}), 400
 
-        if coupon["discount_type"] == "percent":
-            discount_amount = int(round(subtotal * coupon["discount_value"] / 100))
-        else:
-            discount_amount = coupon["discount_value"]
-        discount_amount = max(0, min(discount_amount, subtotal - 1 if subtotal > 0 else 0))
-        final_amount = subtotal - discount_amount
+        margin = cart_coupon_margin(items=items, subtotal=subtotal, discount_type=coupon["discount_type"], discount_value=int(coupon["discount_value"] or 0))
+        requested_discount = margin["requested_discount"]
+        if requested_discount > margin["safe_discount"] and any(int((it["product"].get("cost_price") or 0)) > 0 for it in items):
+            conn.close()
+            return jsonify({"error": "That coupon exceeds the cart's protected minimum margin."}), 400
+        discount_amount = margin["safe_discount"]
+        final_amount = margin["final_price"]
         applied_code = coupon["code"]
 
     order_ref = db.new_order_ref()
@@ -1326,7 +1327,7 @@ def api_cart_create_order():
     conn.commit()
 
     if testing_mode:
-        _confirm_order_payment(conn, order, order_items, payment_mode="test")
+        confirm_order_payment_durable(conn, order=order, order_items=order_items, payment_mode="test", confirm_callable=_confirm_order_payment)
         return jsonify({
             "test_mode": True,
             "payment_mode": "test",
@@ -2956,7 +2957,7 @@ def razorpay_webhook():
         "SELECT * FROM order_items WHERE order_id = ?", (order["id"],)
     ).fetchall()
     try:
-        _confirm_order_payment(conn, order, order_items, payment_mode="gateway", razorpay_payment_id=razorpay_payment_id, razorpay_signature="")
+        confirm_order_payment_durable(conn, order=order, order_items=order_items, payment_mode="gateway", razorpay_payment_id=razorpay_payment_id, razorpay_signature="", confirm_callable=_confirm_order_payment)
         if event_id:
             mark_webhook_event_processed(conn, event_id, status="processed")
         conn.commit()

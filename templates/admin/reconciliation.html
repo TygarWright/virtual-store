@@ -1,0 +1,15 @@
+{% extends "admin/base.html" %}
+{% block title %}Reconciliation{% endblock %}
+{% block content %}
+<div class="admin-topbar">
+  <div><h1>Payment Reconciliation</h1><p class="muted">Compare provider truth with local orders and refunds. TITAN never silently repairs financial mismatches.</p></div>
+  <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="admin-btn admin-btn--primary" type="submit">Run reconciliation</button></form>
+</div>
+<section class="card-box"><h3>Open discrepancies</h3>
+{% if open_items %}<div class="table-wrap"><table class="admin-table"><thead><tr><th>Severity</th><th>Issue</th><th>Entity</th><th>Details</th><th>Action</th></tr></thead><tbody>
+{% for i in open_items %}<tr><td>{{ i.severity }}</td><td><strong>{{ i.title }}</strong><div class="muted">{{ i.code }}</div></td><td>{{ i.entity }}{% if i.entity_id %} #{{ i.entity_id }}{% endif %}</td><td>{{ i.details }}<div class="muted">Age: {{ i.age_days }}d · {{ i.aging_bucket }}</div></td><td><form method="POST" action="{{ url_for('admin.admin_reconciliation_resolve', item_id=i.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><select name="resolution_code" aria-label="Resolution code"><option value="manual_review">Manual review</option><option value="provider_confirmed">Provider confirmed</option><option value="local_record_corrected">Local record corrected</option><option value="duplicate">Duplicate</option><option value="false_positive">False positive</option><option value="accepted_difference">Accepted difference</option><option value="escalated">Escalated</option></select><input name="resolution" required placeholder="Resolution note"><button class="admin-btn admin-btn--small" type="submit">Resolve</button></form></td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p>No unresolved reconciliation discrepancies.</p>{% endif %}
+</section>
+<section class="card-box"><h3>Recent runs</h3>
+{% if runs %}<div class="table-wrap"><table class="admin-table"><thead><tr><th>Started</th><th>Provider</th><th>Status</th><th>Scanned</th><th>Repaired</th><th>Mismatches</th></tr></thead><tbody>{% for r in runs %}<tr><td>{{ r.started_at }}</td><td>{{ r.provider }}</td><td>{{ r.status }}</td><td>{{ r.scanned_orders }}</td><td>{{ r.repaired_orders }}</td><td>{{ r.mismatches }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p>No reconciliation runs yet.</p>{% endif %}</section>
+{% endblock %}

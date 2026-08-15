@@ -23,6 +23,8 @@ required = [
     Path("backup_db.sh"),
     Path("TITAN/CHECKLIST.md"),
     Path("TITAN/PHASE10_RUNBOOK.md"),
+    Path("scripts/phase10_preflight.py"),
+    Path("scripts/phase10_certification_manifest.py"),
 ]
 for rel in required:
     if not (ROOT / rel).exists():
@@ -67,4 +69,5 @@ if errors:
     sys.exit(1)
 
 print("PHASE 10 STATIC GATE: PASS")
+print("Phase 10 repository preflight + certification manifest assets are present.")
 print("Live/staging certification remains explicitly required for: payments, webhooks, browser/device UX, load, migration/restore rehearsal, deployment and rollback.")

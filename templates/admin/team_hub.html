@@ -2,32 +2,153 @@
 {% extends "admin/base.html" %}
 {% block title %}Team Hub{% endblock %}
 {% block content %}
-<div class="admin-page-header"><div><h1>Team Hub</h1><p class="text-muted">Talk directly. No ticket required.</p></div></div>
-<div class="team-hub-shell">
+<div class="admin-page-header titan-page-header">
+  <div>
+    <p class="titan-eyebrow">Collaboration</p>
+    <h1>Team Hub</h1>
+    <p class="text-muted">Direct internal communication without turning routine conversations into tickets.</p>
+  </div>
+  <div class="titan-toolbar">
+    <button class="admin-btn admin-btn--ghost titan-icon-button" id="teamNotifyBtn" type="button" aria-expanded="false" aria-controls="teamNotifyPanel" title="Notifications">
+      {{ icon('bell') }}<span class="titan-visually-hidden">Notifications</span><span id="teamNotifyBadge" class="admin-nav__badge" {% if not unread_notifications %}hidden{% endif %}>{{ unread_notifications|length }}</span>
+    </button>
+    <button class="admin-btn admin-btn--ghost" id="teamPresenceBtn" type="button" aria-haspopup="listbox" aria-expanded="false">Status: <span id="teamPresenceLabel">Online</span></button>
+  </div>
+</div>
+
+<div class="team-hub-shell titan-surface">
   <div class="team-hub-layout">
-  <div class="admin-card team-hub-sidebar">
-    <h3 class="team-hub-title">Conversations</h3>
-    {% for c in conversations %}
-      <a class="team-hub-conversation{% if c.id==selected.id %} team-hub-conversation--active{% endif %}" href="{{ url_for('admin.admin_team_hub', conversation=c.id) }}">
-        <strong>{% if c.kind=='global' %}{{ icon('globe') }}{% elif c.kind=='direct' %}{{ icon('user') }}{% else %}{{ icon('users') }}{% endif %} {{ c.title if c.title else c.target_username }}</strong>
-        {% if c.unread_count %}<span class="admin-nav__badge">{{ c.unread_count }}</span>{% endif %}
-      </a>
-    {% endfor %}
-    <hr>
-    <form method="POST" action="{{ url_for('admin.admin_team_hub') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="kind" value="direct">
-      <label>Start a direct chat</label>
-      <select name="target_admin_id" class="form-input" required>{% for a in admins %}<option value="{{ a.id }}">{{ a.username }} · {{ a.role }}</option>{% endfor %}</select>
-      <input type="text" name="body" class="form-input" placeholder="Message…" required>
-      <button class="admin-btn admin-btn--primary" type="submit">Send</button>
-    </form>
+    <aside class="admin-card team-hub-sidebar titan-panel" aria-label="Conversations">
+      <div class="team-hub-title-row">
+        <div><p class="titan-eyebrow">Workspace</p><h3 class="team-hub-title">Conversations</h3></div>
+        <span id="teamUnreadCount" class="admin-nav__badge" {% if not conversations|selectattr('unread_count')|list %}hidden{% endif %}>{{ conversations|sum(attribute='unread_count') }}</span>
+      </div>
+      <div class="team-hub-tools">
+        <label class="titan-visually-hidden" for="teamSearch">Search messages</label>
+        <input id="teamSearch" class="form-input titan-field" type="search" placeholder="Search messages" aria-label="Search messages">
+        <div class="team-hub-filter-row" role="group" aria-label="Conversation filters">
+          <button type="button" class="admin-btn admin-btn--ghost titan-compact-action team-filter team-filter--active" data-filter="all">All</button>
+          <button type="button" class="admin-btn admin-btn--ghost titan-compact-action team-filter" data-filter="unread">Unread</button>
+          <button type="button" class="admin-btn admin-btn--ghost titan-compact-action team-filter" data-filter="pinned">Pinned</button>
+        </div>
+      </div>
+      <div class="team-hub-conversation-list" role="list">
+      {% for c in conversations %}
+        <a class="team-hub-conversation{% if c.id==selected.id %} team-hub-conversation--active{% endif %}" href="{{ url_for('admin.admin_team_hub', conversation=c.id) }}" role="listitem">
+          <span class="team-hub-conversation__icon" aria-hidden="true">{% if c.kind=='global' %}{{ icon('globe') }}{% elif c.kind=='direct' %}{{ icon('user') }}{% else %}{{ icon('users') }}{% endif %}</span>
+          <span class="team-hub-conversation__body"><strong>{{ c.title if c.title else c.target_username }}</strong><small>{% if c.kind=='context' %}{{ c.context_type|capitalize }}{% else %}{{ c.kind|capitalize }}{% endif %}</small></span>
+          {% if c.unread_count %}<span class="admin-nav__badge">{{ c.unread_count }}</span>{% endif %}
+        </a>
+      {% endfor %}
+      </div>
+      <div class="titan-divider"></div>
+      <form method="POST" action="{{ url_for('admin.admin_team_hub') }}" class="titan-form-stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="kind" value="direct">
+        <div><p class="titan-eyebrow">New conversation</p><label for="teamTarget">Direct message</label></div>
+        <select id="teamTarget" name="target_admin_id" class="form-input titan-field" required>
+          {% for a in admins %}<option value="{{ a.id }}">{{ a.username }} · {{ a.role }}{% if presence.get(a.id, {}).get('state') %} · {{ presence.get(a.id, {}).get('state') }}{% endif %}</option>{% endfor %}
+        </select>
+        <textarea name="body" class="form-input titan-field titan-textarea" rows="2" placeholder="Start the conversation" required></textarea>
+        <button class="admin-btn admin-btn--primary titan-action" type="submit">Send message</button>
+      </form>
+    </aside>
+
+    <section class="admin-card team-hub-main titan-panel" aria-label="Conversation">
+      <div class="team-hub-conversation-header">
+        <div>
+          <p class="titan-eyebrow">{{ selected.kind|capitalize }}</p>
+          <h2>{{ selected.title or selected.target_username or 'Conversation' }}</h2>
+        </div>
+        <div class="team-hub-presence-strip" id="teamPresenceStrip" aria-live="polite"></div>
+      </div>
+      <div id="teamMessages" class="team-hub-messages" role="log" aria-live="polite" aria-relevant="additions">
+        {% for m in messages %}
+          <article class="team-hub-message{% if m.sender_admin_id == session.admin_id %} team-hub-message--mine{% endif %}" data-message-id="{{ m.id }}">
+            <div class="team-hub-message__meta">
+              <strong>{{ m.sender_name }}</strong><small>{{ m.created_at[:16].replace('T',' ') }}</small>
+              <button class="admin-btn admin-btn--ghost team-reply titan-compact-action" type="button" data-message-id="{{ m.id }}">Reply</button> <button class="admin-btn admin-btn--ghost team-pin titan-compact-action" type="button" data-message-id="{{ m.id }}">{{ icon('pin') }} <span>Pin</span></button>
+            </div>
+            {% if m.parent_message_id %}<div class="team-hub-message__parent">Replying to {{ m.parent_sender_name }}: {{ m.parent_body }}</div>{% endif %}<div class="team-hub-message__body">{{ m.body }}</div><div class="team-hub-message__reactions" data-reactions-for="{{ m.id }}"></div>
+          </article>
+        {% endfor %}
+      </div>
+      <form method="POST" action="{{ url_for('admin.admin_team_hub') }}?conversation={{ selected.id }}" class="team-hub-compose titan-composer">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="conversation_id" value="{{ selected.id }}"><input type="hidden" name="kind" value="global">
+        <div class="titan-composer__field">
+          <label class="titan-visually-hidden" for="teamCompose">Write a message</label>
+          <textarea id="teamCompose" class="form-input team-hub-compose__input titan-field titan-textarea" name="body" rows="2" placeholder="Write a message — use @username to mention someone" required></textarea>
+          <div class="titan-composer__hint">Enter to send · Shift+Enter for a new line</div>
+        </div>
+        <button class="admin-btn admin-btn--primary titan-action" type="submit">Send</button>
+      </form>
+    </section>
   </div>
-  <div class="admin-card team-hub-main">
-    <h3>{{ selected.title or selected.target_username or 'Conversation' }}</h3>
-    <div id="teamMessages" class="team-hub-messages">
-      {% for m in messages %}<div class="team-hub-message"><strong>{{ m.sender_name }}</strong><small class="text-muted"> · {{ m.created_at[:16].replace('T',' ') }}</small><div>{{ m.body }}</div></div>{% endfor %}
-    </div>
-    <form method="POST" action="{{ url_for('admin.admin_team_hub') }}?conversation={{ selected.id }}" class="team-hub-compose"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="conversation_id" value="{{ selected.id }}"><input type="hidden" name="kind" value="global"><input class="form-input team-hub-compose__input" name="body" placeholder="Write a message…" required><button class="admin-btn admin-btn--primary">Send</button></form>
+</div>
+
+<aside id="teamNotifyPanel" class="titan-popover" hidden aria-label="Team notifications">
+  <div class="titan-popover__header"><strong>Notifications</strong><button type="button" class="admin-btn admin-btn--ghost titan-icon-button" id="teamNotifyClose" aria-label="Close">{{ icon('x') }}</button></div>
+  <div id="teamNotifyList" class="titan-popover__body">
+    {% if unread_notifications %}
+      {% for n in unread_notifications %}<button class="titan-notification" type="button" data-notification-id="{{ n.id }}"><strong>{{ n.title }}</strong><span>{{ n.body }}</span><small>{{ n.created_at[:16].replace('T',' ') }}</small></button>{% endfor %}
+    {% else %}<p class="text-muted titan-empty">You're all caught up.</p>{% endif %}
   </div>
-</div></div>
+  <div class="titan-popover__footer"><button type="button" class="admin-btn admin-btn--ghost" id="teamNotifyReadAll">Mark all as read</button></div>
+</aside>
+
+<div id="teamPresenceMenu" class="titan-popover titan-presence-menu" hidden role="listbox" aria-label="Set presence">
+  <button type="button" data-state="online">Online</button>
+  <button type="button" data-state="away">Away</button>
+  <button type="button" data-state="offline">Offline</button>
+</div>
+<dialog id="teamReplyDialog" class="titan-dialog" aria-labelledby="teamReplyTitle">
+  <form method="dialog" class="titan-dialog__card" id="teamReplyForm">
+    <div class="titan-dialog__header"><div><p class="titan-eyebrow">Conversation</p><h2 id="teamReplyTitle">Reply to message</h2></div><button type="submit" value="cancel" class="admin-btn admin-btn--ghost titan-icon-button" aria-label="Close">{{ icon('x') }}</button></div>
+    <input type="hidden" id="teamReplyParent">
+    <label for="teamReplyBody">Reply</label>
+    <textarea id="teamReplyBody" class="form-input titan-field titan-textarea" rows="4" maxlength="4000" required></textarea>
+    <div class="titan-dialog__actions"><button type="submit" value="cancel" class="admin-btn admin-btn--ghost">Cancel</button><button type="submit" value="send" class="admin-btn admin-btn--primary">Send reply</button></div>
+  </form>
+</dialog>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const cid = '{{ selected.id }}';
+  const box = document.getElementById('teamMessages');
+  const notifyPanel = document.getElementById('teamNotifyPanel');
+  const notifyList = document.getElementById('teamNotifyList');
+  const notifyBadge = document.getElementById('teamNotifyBadge');
+  const notifyBtn = document.getElementById('teamNotifyBtn');
+  const presenceBtn = document.getElementById('teamPresenceBtn');
+  const presenceMenu = document.getElementById('teamPresenceMenu');
+  const presenceLabel = document.getElementById('teamPresenceLabel');
+  const presenceStrip = document.getElementById('teamPresenceStrip');
+
+  const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const renderMessages=(rows)=>{ box.innerHTML=(rows||[]).map(m=>`<article class="team-hub-message ${Number(m.sender_admin_id)===Number('{{ session.admin_id }}')?'team-hub-message--mine':''}" data-message-id="${m.id}"><div class="team-hub-message__meta"><strong>${esc(m.sender_name)}</strong><small>${esc(m.created_at?.slice(0,16)?.replace('T',' '))}</small><button class="admin-btn admin-btn--ghost team-reply titan-compact-action" type="button" data-message-id="${m.id}">Reply</button> <button class="admin-btn admin-btn--ghost team-pin titan-compact-action" type="button" data-message-id="${m.id}">Pin</button></div>${m.parent_message_id?`<div class="team-hub-message__parent">Replying to ${esc(m.parent_sender_name)}: ${esc(m.parent_body)}</div>`:''}<div class="team-hub-message__body">${esc(m.body)}</div><div class="team-hub-message__reactions" data-reactions-for="${m.id}"><button class="admin-btn admin-btn--ghost team-react titan-compact-action" data-message-id="${m.id}" data-reaction="+1">+1</button></div></article>`).join('')||'<p class="text-muted titan-empty">No messages yet.</p>'; bindPins(); bindReplies(); bindReactions();};
+  const bindPins=()=>document.querySelectorAll('.team-pin').forEach(btn=>btn.onclick=async()=>{const f=new FormData();f.append('message_id',btn.dataset.messageId);f.append('csrf_token',csrf);const r=await fetch('/admin/team-hub/pin',{method:'POST',body:f,credentials:'same-origin'});if(r.ok){const s=btn.querySelector('span');if(s)s.textContent=s.textContent==='Pin'?'Pinned':'Pin';}});
+  const bindReplies=()=>document.querySelectorAll('.team-reply').forEach(btn=>btn.onclick=()=>{const dialog=document.getElementById('teamReplyDialog');const parent=document.getElementById('teamReplyParent');const input=document.getElementById('teamReplyBody');if(!dialog||!parent||!input)return;parent.value=btn.dataset.messageId;input.value='';dialog.showModal();input.focus();});
+  const bindReactions=()=>document.querySelectorAll('.team-react').forEach(btn=>btn.onclick=async()=>{await fetch('/admin/team-hub/reaction',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({message_id:Number(btn.dataset.messageId),reaction:btn.dataset.reaction}),credentials:'same-origin'});await refreshMessages();});
+  async function refreshMessages(){const r=await fetch(`/admin/team-hub/poll/${cid}`,{credentials:'same-origin'});if(r.ok){const rows=await r.json();renderMessages(rows);}}
+  async function refreshNotifications(){const r=await fetch('/admin/team-hub/notifications',{credentials:'same-origin'});if(!r.ok)return;const rows=await r.json();notifyBadge.textContent=rows.length;notifyBadge.hidden=!rows.length;notifyList.innerHTML=rows.length?rows.map(n=>`<button class="titan-notification" type="button" data-notification-id="${n.id}"><strong>${esc(n.title)}</strong><span>${esc(n.body)}</span><small>${esc(n.created_at?.slice(0,16)?.replace('T',' '))}</small></button>`).join(''):'<p class="text-muted titan-empty">You\'re all caught up.</p>';}
+  async function refreshPresence(){const r=await fetch('/admin/team-hub/presence',{credentials:'same-origin'});if(!r.ok)return;const rows=await r.json();presenceStrip.innerHTML=rows.filter(x=>x.state==='online'||x.state==='away').slice(0,6).map(x=>`<span class="titan-presence-chip titan-presence-chip--${esc(x.state)}"><i></i>${esc(x.username)}</span>`).join('');}
+  notifyBtn?.addEventListener('click',()=>{notifyPanel.hidden=!notifyPanel.hidden;notifyBtn.setAttribute('aria-expanded',String(!notifyPanel.hidden));});
+  document.getElementById('teamNotifyClose')?.addEventListener('click',()=>{notifyPanel.hidden=true;notifyBtn.setAttribute('aria-expanded','false');});
+  document.getElementById('teamNotifyReadAll')?.addEventListener('click',async()=>{await fetch('/admin/team-hub/notifications/read',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({ids:[]}),credentials:'same-origin'});await refreshNotifications();});
+  notifyList?.addEventListener('click',async(e)=>{const b=e.target.closest('[data-notification-id]');if(!b)return;await fetch('/admin/team-hub/notifications/read',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({ids:[Number(b.dataset.notificationId)]}),credentials:'same-origin'});await refreshNotifications();});
+  presenceBtn?.addEventListener('click',()=>{presenceMenu.hidden=!presenceMenu.hidden;presenceBtn.setAttribute('aria-expanded',String(!presenceMenu.hidden));});
+  presenceMenu?.addEventListener('click',async(e)=>{const b=e.target.closest('[data-state]');if(!b)return;const state=b.dataset.state;await fetch('/admin/team-hub/presence',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({state}),credentials:'same-origin'});presenceLabel.textContent=state[0].toUpperCase()+state.slice(1);presenceMenu.hidden=true;});
+  const filters=document.querySelectorAll('.team-filter');
+  filters.forEach(btn=>btn.addEventListener('click',()=>{filters.forEach(x=>x.classList.remove('team-filter--active'));btn.classList.add('team-filter--active');const mode=btn.dataset.filter;document.querySelectorAll('.team-hub-conversation').forEach(row=>{if(mode==='all'){row.hidden=false;return;}if(mode==='unread'){row.hidden=!row.querySelector('.admin-nav__badge');return;}row.hidden=!row.querySelector('.team-pin');});}));
+  const search=document.getElementById('teamSearch'); search?.addEventListener('keydown',async(e)=>{if(e.key!=='Enter')return;const q=search.value.trim();if(!q){await refreshMessages();return;}const r=await fetch(`/admin/team-hub/search?conversation=${cid}&q=${encodeURIComponent(q)}`,{credentials:'same-origin'});if(r.ok)renderMessages(await r.json());});
+  const compose=document.getElementById('teamCompose'); compose?.addEventListener('keydown',(e)=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();compose.form.requestSubmit();}});
+  document.getElementById('teamReplyForm')?.addEventListener('submit',async(e)=>{if(e.submitter?.value!=='send')return;e.preventDefault();const parent=Number(document.getElementById('teamReplyParent').value);const body=document.getElementById('teamReplyBody').value.trim();if(!body)return;const r=await fetch('/admin/team-hub/reply',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({conversation_id:Number(cid),parent_message_id:parent,body}),credentials:'same-origin'});if(r.ok){document.getElementById('teamReplyDialog').close();refreshMessages();}});
+  bindPins(); refreshNotifications(); refreshPresence();
+  setInterval(()=>{refreshNotifications();refreshPresence();refreshMessages();},10000);
+})();
+</script>
 {% endblock %}

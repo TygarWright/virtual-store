@@ -32,6 +32,7 @@ def main() -> int:
     checks.append({"name": "webhook_secret_configured", "ok": bool(os.getenv("RAZORPAY_WEBHOOK_SECRET"))})
     checks.append({"name": "store_test_mode_disabled", "ok": os.getenv("ALLOW_STORE_TEST_MODE", "false").lower() != "true"})
     checks.append({"name": "otp_dev_mode_disabled", "ok": os.getenv("OTP_DEV_MODE", "false").lower() != "true"})
+    checks.append({"name": "csrf_enabled", "ok": os.getenv("CSRF_ENABLED", "true").lower() in ("true", "1", "yes", "on")})
 
     db = _db_path()
     if db:

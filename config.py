@@ -84,6 +84,8 @@ RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
 
 # --- Observability / background jobs ---
 SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+CRON_SECRET = os.environ.get("CRON_SECRET", "").strip()
+SITE_URL = os.environ.get("SITE_URL", "").strip()
 INTELLIGENCE_API_URL = os.environ.get("INTELLIGENCE_API_URL", "").strip()
 INTELLIGENCE_API_KEY = os.environ.get("INTELLIGENCE_API_KEY", "").strip()
 INTELLIGENCE_MODEL = os.environ.get("INTELLIGENCE_MODEL", "").strip()

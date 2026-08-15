@@ -41,6 +41,12 @@ jobs:
           python -m pip install --upgrade pip-audit
           python -m pip_audit -r requirements.txt
 
+      - name: Business invariants regression suite
+        run: python scripts/check_invariants.py
+
+      - name: Security regression suite
+        run: python scripts/security_regression_suite.py
+
       - name: Compile application
         run: python -m compileall -q .
 

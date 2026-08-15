@@ -18,7 +18,38 @@
   --titan-radius-sm: 6px;
   --titan-shadow-soft: 0 1px 2px rgba(0,0,0,.04), 0 12px 30px rgba(0,0,0,.05);
   --titan-shadow-float: 0 12px 38px rgba(0,0,0,.12);
+  --titan-space-1: .25rem;
+  --titan-space-2: .5rem;
+  --titan-space-3: .75rem;
+  --titan-space-4: 1rem;
+  --titan-space-5: 1.5rem;
+  --titan-space-6: 2rem;
+  --titan-space-7: 3rem;
+  --titan-control-sm: 36px;
+  --titan-control-md: 42px;
+  --titan-control-lg: 48px;
+  --titan-focus-ring: 0 0 0 3px rgba(10,10,10,.08);
+  --titan-surface-1: #fff;
+  --titan-surface-2: #fafaf8;
+  --titan-surface-3: #f4f4f1;
 }
+
+/* ---------- TITAN canonical primitives ---------- */
+.titan-stack { display:flex; flex-direction:column; gap:var(--titan-space-4); }
+.titan-cluster { display:flex; align-items:center; flex-wrap:wrap; gap:var(--titan-space-2); }
+.titan-surface { background:var(--titan-surface-1); border:1px solid var(--titan-line); border-radius:var(--titan-radius); box-shadow:var(--titan-shadow-soft); }
+.titan-surface--quiet { background:var(--titan-surface-2); box-shadow:none; }
+.titan-surface--inset { background:var(--titan-surface-3); box-shadow:none; }
+.titan-divider { height:1px; background:var(--titan-line); border:0; margin:var(--titan-space-4) 0; }
+.titan-control { min-height:var(--titan-control-md); }
+.titan-control--sm { min-height:var(--titan-control-sm); }
+.titan-control--lg { min-height:var(--titan-control-lg); }
+:where(button, input, select, textarea, a):focus-visible { outline:none; box-shadow:var(--titan-focus-ring); }
+.titan-muted { color:var(--titan-muted); }
+.titan-visually-hidden { position:absolute!important; width:1px!important; height:1px!important; padding:0!important; margin:-1px!important; overflow:hidden!important; clip:rect(0,0,0,0)!important; white-space:nowrap!important; border:0!important; }
+
+/* Large lists should not force the browser to paint every row at once. */
+.titan-virtual-list > * { content-visibility:auto; contain-intrinsic-size: 0 72px; }
 
 /* ---------- shared interaction grammar ---------- */
 button, input, textarea, select { font: inherit; }
@@ -320,156 +351,137 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .admin-command-palette__foot span { color:#333; border:1px solid #ddd; border-radius:4px; padding:.08rem .28rem; }
 @media (max-width:760px){ .admin-command-palette{padding:6vh .7rem .7rem;} .admin-command-palette__panel{border-radius:10px;} }
 
-
-/* ========================================================================
-   TITAN LIQUID GLASS
-   ------------------------------------------------------------------------
-   Apple-inspired translucent material for a restrained subset of surfaces.
-   Performance rules:
-   - Only opt-in surfaces receive backdrop-filter.
-   - No full-page filter / paint containment tricks.
-   - Static highlight layers use CSS gradients, not animation.
-   - Reduced-motion and low-transparency fallbacks are provided.
-   - Dense data surfaces remain opaque for readability and GPU efficiency.
-   ======================================================================== */
+/* ---------- TITAN design-system primitives ---------- */
 :root {
-  --titan-glass-radius: 22px;
-  --titan-glass-border: rgba(255,255,255,.26);
-  --titan-glass-fill: rgba(255,255,255,.72);
-  --titan-glass-fill-dark: rgba(18,18,18,.74);
-  --titan-glass-blur: 22px;
-  --titan-glass-sat: 155%;
-  --titan-glass-shadow:
-    0 18px 48px rgba(0,0,0,.10),
-    0 2px 10px rgba(0,0,0,.06),
-    inset 0 1px 0 rgba(255,255,255,.55),
-    inset 0 -1px 0 rgba(0,0,0,.05);
+  --titan-space-1: .25rem;
+  --titan-space-2: .5rem;
+  --titan-space-3: .75rem;
+  --titan-space-4: 1rem;
+  --titan-space-5: 1.25rem;
+  --titan-space-6: 1.5rem;
+  --titan-space-8: 2rem;
+  --titan-space-10: 2.5rem;
+  --titan-space-12: 3rem;
+  --titan-focus-ring: 0 0 0 3px rgba(10,10,10,.11);
+  --titan-transition-fast: 140ms ease;
+  --titan-transition-base: 180ms var(--ease);
 }
 
-.titan-liquid-glass {
-  position: relative;
-  isolation: isolate;
-  overflow: clip;
-  border: 1px solid var(--titan-glass-border);
-  border-radius: var(--titan-glass-radius);
-  background:
-    linear-gradient(135deg, rgba(255,255,255,.34), rgba(255,255,255,.08) 46%, rgba(255,255,255,.18)),
-    var(--titan-glass-fill);
-  box-shadow: var(--titan-glass-shadow);
-  -webkit-backdrop-filter: blur(var(--titan-glass-blur)) saturate(var(--titan-glass-sat));
-  backdrop-filter: blur(var(--titan-glass-blur)) saturate(var(--titan-glass-sat));
-  background-clip: padding-box;
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  box-shadow: var(--titan-focus-ring);
 }
 
-/* The optical layer: a static edge sheen + four corner light lobes. */
-.titan-liquid-glass::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  border-radius: inherit;
-  background:
-    radial-gradient(90px 60px at 0% 0%, rgba(255,255,255,.42), transparent 72%),
-    radial-gradient(85px 60px at 100% 0%, rgba(255,255,255,.22), transparent 72%),
-    radial-gradient(85px 60px at 100% 100%, rgba(255,255,255,.10), transparent 72%),
-    radial-gradient(85px 60px at 0% 100%, rgba(255,255,255,.16), transparent 72%),
-    linear-gradient(112deg, transparent 0 44%, rgba(255,255,255,.10) 49%, transparent 54%);
-  opacity: .9;
-  mix-blend-mode: screen;
-}
-
-/* Subtle inner refraction/rim. The effect comes from highlight displacement around corners,
-   avoiding an expensive page-wide SVG displacement filter. */
-.titan-liquid-glass::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.20), transparent 18% 82%, rgba(0,0,0,.05)),
-    radial-gradient(120% 80% at 50% -15%, rgba(255,255,255,.16), transparent 55%);
-  box-shadow:
-    inset 0 0 0 1px rgba(255,255,255,.10),
-    inset 0 10px 24px rgba(255,255,255,.04),
-    inset 0 -14px 30px rgba(0,0,0,.035);
-  opacity: .8;
-}
-
-.titan-liquid-glass > * { position: relative; z-index: 1; }
-
-.titan-liquid-glass--nav {
-  /* Navigation is the primary “floating glass” surface. */
-  border-radius: 0 0 20px 20px;
-  border-top: 0;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.72), rgba(255,255,255,.58)),
-    rgba(255,255,255,.72);
-  box-shadow:
-    0 10px 34px rgba(0,0,0,.08),
-    0 1px 0 rgba(255,255,255,.70),
-    inset 0 -1px 0 rgba(0,0,0,.06);
-}
-
-.titan-liquid-glass--sidebar {
-  border-radius: 0 24px 24px 0;
-  border-left: 0;
-  border-top: 0;
-  border-bottom: 0;
-  border-right-color: rgba(255,255,255,.12);
-  background:
-    linear-gradient(145deg, rgba(255,255,255,.12), rgba(255,255,255,.035)),
-    rgba(11,11,11,.74);
-  box-shadow:
-    18px 0 48px rgba(0,0,0,.20),
-    inset -1px 0 rgba(255,255,255,.07),
-    inset 0 1px rgba(255,255,255,.05);
-  -webkit-backdrop-filter: blur(26px) saturate(125%);
-  backdrop-filter: blur(26px) saturate(125%);
-}
-
-.titan-liquid-glass--sidebar::before {
-  opacity: .55;
-}
-
-.titan-liquid-glass--dialog {
-  border-radius: 26px;
-  background: rgba(255,255,255,.78);
-  box-shadow:
-    0 28px 90px rgba(0,0,0,.20),
-    0 4px 20px rgba(0,0,0,.10),
-    inset 0 1px rgba(255,255,255,.7),
-    inset 0 -1px rgba(0,0,0,.05);
-}
-
-/* Browser support / user preference fallback. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .titan-liquid-glass { background: rgba(255,255,255,.94); }
-  .titan-liquid-glass--sidebar { background: rgba(12,12,12,.97); }
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .titan-liquid-glass {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    background: rgba(255,255,255,.96);
-  }
-  .titan-liquid-glass--sidebar { background: rgba(10,10,10,.98); }
-  .titan-liquid-glass::before,
-  .titan-liquid-glass::after { opacity: .35; }
-}
+.admin-eyebrow { margin:0 0 .35rem; color:var(--grey-600); font-size:.66rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
+.admin-toolbar { display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; margin:0 0 1rem; }
+.status-pill { display:inline-flex; align-items:center; min-height:24px; padding:0 .55rem; border:1px solid var(--titan-line); border-radius:999px; font-size:.68rem; font-weight:700; text-transform:capitalize; }
+.status-pill--ok, .status-pill--completed { background:#f1f6f1; }
+.status-pill--running { background:#f5f5f2; }
+.status-pill--error, .status-pill--failed { background:#f8efed; }
 
 @media (prefers-reduced-motion: reduce) {
-  .titan-liquid-glass { transition: none !important; }
+  :where(a, button, input, select, textarea) { scroll-behavior:auto !important; }
 }
 
-@media (max-width: 760px) {
-  .titan-liquid-glass--nav { border-radius: 0 0 16px 16px; }
-  .titan-liquid-glass--sidebar { border-radius: 0 18px 18px 0; }
+/* Round 26: canonical Team + Design System finishing layer */
+:root {
+  --titan-space-1: .25rem;
+  --titan-space-2: .5rem;
+  --titan-space-3: .75rem;
+  --titan-space-4: 1rem;
+  --titan-space-5: 1.25rem;
+  --titan-space-6: 1.5rem;
+  --titan-space-8: 2rem;
+  --titan-control-h: 42px;
+  --titan-focus: 0 0 0 3px rgba(10,10,10,.11);
+}
+.titan-visually-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.titan-page-header{display:flex;justify-content:space-between;gap:var(--titan-space-6)}
+.titan-eyebrow{margin:0 0 .2rem;color:var(--grey-600);font-size:.67rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.titan-toolbar{display:flex;align-items:center;gap:var(--titan-space-2)}
+.titan-icon-button{position:relative;min-width:var(--titan-control-h);min-height:var(--titan-control-h);padding:.5rem}
+.titan-field{min-height:var(--titan-control-h)}
+.titan-textarea{min-height:auto;resize:vertical}
+.titan-action{min-height:var(--titan-control-h)}
+.titan-surface{background:#fff;border:1px solid var(--titan-line);border-radius:var(--titan-radius);box-shadow:0 4px 18px rgba(10,10,10,.035)}
+.titan-panel{box-shadow:none}
+.titan-divider{height:1px;background:var(--titan-line);margin:var(--titan-space-5) 0}
+.titan-form-stack{display:grid;gap:var(--titan-space-3)}
+.titan-compact-action{display:inline-flex;align-items:center;gap:.3rem;padding:.28rem .5rem;font-size:.72rem}
+.titan-compact-action svg{width:14px;height:14px}
+.team-hub-conversation-list{display:grid;gap:.15rem;max-height:420px;overflow:auto;padding-right:.1rem}
+.team-hub-conversation__icon{display:grid;place-items:center;width:30px;height:30px;border:1px solid var(--titan-line);border-radius:7px;background:#fff;flex:0 0 auto}
+.team-hub-conversation__icon svg{width:15px;height:15px}
+.team-hub-conversation__body{min-width:0;display:grid;gap:.08rem;flex:1}
+.team-hub-conversation__body strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-hub-conversation__body small{color:var(--grey-600);font-size:.68rem}
+.team-hub-conversation-header{display:flex;justify-content:space-between;gap:var(--titan-space-4);align-items:center;border-bottom:1px solid var(--titan-line);padding-bottom:var(--titan-space-4);margin-bottom:var(--titan-space-4)}
+.team-hub-message{background:#fafaf8}
+.team-hub-message--mine{background:#f0f0ed;margin-left:auto}
+.team-hub-message__body{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
+.team-hub-message__meta{display:flex;align-items:center;gap:.45rem}
+.team-hub-message__meta small{color:var(--grey-600);margin-right:auto}
+.team-hub-compose{align-items:flex-end}
+.titan-composer{display:flex;gap:var(--titan-space-3);padding-top:var(--titan-space-4);border-top:1px solid var(--titan-line)}
+.titan-composer__field{flex:1;display:grid;gap:.3rem}
+.titan-composer__hint{font-size:.68rem;color:var(--grey-600)}
+.titan-popover{position:fixed;z-index:1200;right:1.25rem;top:4.5rem;width:min(390px,calc(100vw - 2rem));background:#fff;border:1px solid var(--titan-line-strong);border-radius:10px;box-shadow:0 18px 46px rgba(0,0,0,.12);overflow:hidden}
+.titan-popover__header,.titan-popover__footer{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;border-bottom:1px solid var(--titan-line)}
+.titan-popover__footer{border-top:1px solid var(--titan-line);border-bottom:0;justify-content:flex-start}
+.titan-popover__body{max-height:420px;overflow:auto;padding:.35rem}
+.titan-notification{display:grid;width:100%;text-align:left;gap:.18rem;border:0;background:transparent;padding:.7rem .75rem;border-radius:7px;cursor:pointer}
+.titan-notification:hover{background:#f4f4f1}
+.titan-notification span,.titan-notification small{color:var(--grey-600);font-size:.74rem}
+.titan-empty{padding:1.2rem;text-align:center}
+.titan-presence-menu{right:1.25rem;top:4.5rem;width:160px;padding:.35rem}
+.titan-presence-menu button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:.55rem .65rem;border-radius:6px;cursor:pointer}
+.titan-presence-menu button:hover{background:#f4f4f1}
+.titan-presence-strip{display:flex;flex-wrap:wrap;gap:.35rem;justify-content:flex-end}
+.titan-presence-chip{display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .5rem;border:1px solid var(--titan-line);border-radius:999px;font-size:.7rem;background:#fff}
+.titan-presence-chip i{width:7px;height:7px;border-radius:50%;background:#8a8a84}
+.titan-presence-chip--online i{background:#1d7a4d}
+.titan-presence-chip--away i{background:#a46a12}
+:focus-visible{outline:none;box-shadow:var(--titan-focus)}
+@media (prefers-reduced-motion: reduce){.titan-popover,.team-hub-message{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+@media (max-width: 760px){
+  .titan-page-header,.team-hub-conversation-header{align-items:flex-start;flex-direction:column}
+  .titan-toolbar{width:100%}
+  .titan-toolbar>*{flex:1}
+  .team-hub-shell{min-height:0}
+  .team-hub-messages{min-height:320px}
+  .titan-popover{left:1rem;right:1rem;width:auto}
 }
 
-/* Keep glass away from dense data surfaces and huge scrolling regions. */
-.table-wrap .titan-liquid-glass,
-.table-responsive .titan-liquid-glass,
-.admin-table .titan-liquid-glass { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* ---------- support cockpit ---------- */
+.titan-support-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.8fr);gap:var(--titan-space-4)}
+.titan-definition-list{display:grid;gap:.7rem;margin:0}
+.titan-definition-list div{display:grid;grid-template-columns:100px minmax(0,1fr);gap:.75rem;padding-bottom:.65rem;border-bottom:1px solid var(--titan-line)}
+.titan-definition-list dt{font-size:.74rem;color:var(--titan-muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.titan-definition-list dd{margin:0;overflow-wrap:anywhere}
+@media (max-width: 760px){.titan-support-grid{grid-template-columns:1fr}.titan-definition-list div{grid-template-columns:1fr;gap:.2rem}}
+
+/* Round 43: Guardian self-health */
+.guardian-health { border: 1px solid var(--titan-border, rgba(0,0,0,.08)); }
+.health-checks { list-style: none; margin: .75rem 0 0; padding: 0; display: grid; gap: .45rem; }
+.health-checks li { display: grid; grid-template-columns: 4rem minmax(8rem, max-content) 1fr; gap: .55rem; align-items: baseline; padding: .55rem .7rem; border-radius: .65rem; background: var(--titan-surface-subtle, rgba(0,0,0,.025)); }
+.health-checks li strong { font-size: .72rem; letter-spacing: .08em; }
+.health-checks li small { color: var(--titan-muted, #6b7280); overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .health-checks li { grid-template-columns: 3.5rem 1fr; }
+  .health-checks li small { grid-column: 2; }
+}
+
+
+/* Round 52: Team/Support and final interaction grammar */
+.team-hub-tools{display:grid;gap:.55rem}
+.team-hub-filter-row{display:flex;gap:.35rem;flex-wrap:wrap}
+.team-filter--active{background:#efefec!important;border-color:var(--titan-line-strong)!important}
+.team-hub-conversation[hidden]{display:none}
+.titan-support-order-focus{border-left:3px solid #111}
+.titan-dialog{border:0;padding:0;background:transparent;max-width:min(620px,calc(100vw - 2rem));width:100%}
+.titan-dialog::backdrop{background:rgba(10,10,10,.28)}
+.titan-dialog__card{display:grid;gap:var(--titan-space-4);background:#fff;border:1px solid var(--titan-line-strong);border-radius:12px;padding:1rem;box-shadow:0 20px 60px rgba(0,0,0,.16)}
+.titan-dialog__header,.titan-dialog__actions{display:flex;justify-content:space-between;align-items:center;gap:var(--titan-space-3)}
+.titan-dialog__actions{justify-content:flex-end}
+@media (max-width:760px){.titan-dialog{max-width:none;width:calc(100vw - 1rem)}.team-hub-filter-row{overflow:auto;flex-wrap:nowrap}.team-filter{flex:0 0 auto}}

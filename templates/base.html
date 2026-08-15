@@ -23,7 +23,6 @@
 <link rel="dns-prefetch" href="https://accounts.google.com">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ static_version }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/titan-ui.css') }}?v={{ static_version }}">
 {% if firebase_auth_enabled %}
 <link rel="preload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js" as="script" crossorigin>
 <link rel="preload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js" as="script" crossorigin>
@@ -51,7 +50,7 @@
 {% set greeting_visible = True %}
 {% set time_word = gd.timeOfDay %}
 
-<body data-liquid-glass="1" data-customer-logged-in="{{ '1' if customer_logged_in else '0' }}"
+<body data-customer-logged-in="{{ '1' if customer_logged_in else '0' }}"
       data-customer-name="{{ current_customer_name or '' }}"
       data-greeting-visible="{{ '1' if greeting_visible else '0' }}">
 <!-- Reading progress bar -->
@@ -103,7 +102,7 @@
   <button class="greeting__close" onclick="dismissGreeting()" aria-label="Dismiss greeting">×</button>
 </div>
 
-<nav class="nav titan-liquid-glass titan-liquid-glass--nav">
+<nav class="nav">
   <div class="container">
     <a href="{{ url_for('storefront.home') }}" class="nav__brand">{{ settings.site_name }}</a>
     <form class="nav__search" action="{{ url_for('storefront.home') }}" method="GET" role="search">

@@ -1,0 +1,31 @@
+{% extends "admin/base.html" %}
+{% block title %}Observability{% endblock %}
+{% block content %}
+<div class="admin-page-header"><div><p class="admin-eyebrow">System</p><h1>Observability</h1><p>Follow one request across the application without storing sensitive request payloads.</p></div></div>
+<form class="admin-toolbar" method="get" action="{{ url_for('admin.admin_observability') }}">
+  <input class="admin-input" type="search" name="trace" value="{{ trace_id }}" placeholder="Trace ID" aria-label="Trace ID">
+  <input class="admin-input" type="search" name="operation" value="{{ request.args.get('operation', '') }}" placeholder="Filter operation" aria-label="Filter operation">
+  <button class="admin-btn admin-btn--primary" type="submit">View trace</button>
+</form>
+{% if summary %}
+<section class="stat-grid">
+  <div class="stat-card"><div class="num">{{ summary.spans|length }}</div><div class="label">Spans</div></div>
+  <div class="stat-card"><div class="num">{{ '%.1f'|format(summary.duration_ms) }}</div><div class="label">Trace duration (ms)</div></div>
+  <div class="stat-card"><div class="num">{{ summary.errors }}</div><div class="label">Errors</div></div><div class="stat-card"><div class="num">{{ "%.1f"|format(summary.slowest.duration_ms or 0) if summary.slowest else "—" }}</div><div class="label">Slowest span (ms)</div></div>
+</section>
+<section class="card-box"><h3>Trace timeline</h3>
+  {% macro render_node(n, depth=0) -%}
+    <div class="trace-row" style="margin-left:{{ depth*1.25 }}rem">
+      <div><strong>{{ n.name }}</strong><span class="status-pill status-pill--{{ n.status }}">{{ n.status }}</span></div>
+      <small>{{ n.kind }} · {{ '%.1f'|format(n.duration_ms or 0) }} ms · {{ n.span_id }}</small>
+      {% if n.error %}<div class="form-error">{{ n.error }}</div>{% endif %}
+    </div>
+    {% for c in n.children %}{{ render_node(c, depth+1) }}{% endfor %}
+  {%- endmacro %}
+  {% if summary.root %}{{ render_node(summary.root) }}{% else %}<p>No trace tree available.</p>{% endif %}
+</section>
+{% endif %}
+<section class="card-box"><div class="admin-topbar"><div><h3>Operational alerts</h3><p class="muted">Server-side failures that deserve attention.</p></div></div>
+{% if alerts %}<div class="table-wrap"><table class="admin-table"><thead><tr><th>Severity</th><th>Alert</th><th>Trace</th><th>Created</th><th></th></tr></thead><tbody>{% for a in alerts %}<tr><td><span class="status-pill status-pill--{{ a.severity }}">{{ a.severity }}</span></td><td><strong>{{ a.title }}</strong><br><small>{{ a.details }}</small></td><td>{% if a.trace_id %}<a href="{{ url_for('admin.admin_observability', trace=a.trace_id) }}">{{ a.trace_id[:12] }}…</a>{% else %}—{% endif %}</td><td>{{ a.created_at }}</td><td><form method="POST" action="{{ url_for('admin.admin_observability_resolve_alert', alert_id=a.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="admin-btn" type="submit">Resolve</button></form></td></tr>{% endfor %}</tbody></table></div>{% else %}<p>No open operational alerts.</p>{% endif %}</section>
+<section class="card-box"><h3>Recent spans</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>Time</th><th>Kind</th><th>Name</th><th>Status</th><th>Duration</th><th>Trace</th></tr></thead><tbody>{% for row in spans %}<tr><td>{{ row['started_at'] }}</td><td>{{ row['kind'] }}</td><td><strong>{{ row['name'] }}</strong></td><td><span class="status-pill status-pill--{{ row['status'] }}">{{ row['status'] }}</span></td><td>{{ '%.1f'|format(row['duration_ms']) if row['duration_ms'] is not none else '—' }} ms</td><td><a href="{{ url_for('admin.admin_observability', trace=row['trace_id']) }}">{{ row['trace_id'][:12] }}…</a></td></tr>{% else %}<tr><td colspan="6"><div class="empty-state"><strong>No traces yet.</strong><p>Browse the store or admin to generate correlated request spans.</p></div></td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

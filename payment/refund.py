@@ -7,9 +7,11 @@ import logging
 import sys
 import os
 import sqlite3
+import config
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import database as db
 from payment.gateways import get_payment_gateway
+from titan_invariants import assert_refund_within_paid
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ def initiate_refund(conn, order_id: int, amount: Optional[int] = None,
     if not payment_id:
         return {"success": False, "error": "No captured provider payment found for order"}
 
-    refund_amount = int(amount if amount is not None else order["amount"])
+    refund_amount = assert_refund_within_paid(order, int(amount if amount is not None else order["amount"]))
     if refund_amount <= 0:
         return {"success": False, "error": "Refund amount must be positive"}
 
@@ -55,6 +57,12 @@ def initiate_refund(conn, order_id: int, amount: Optional[int] = None,
             (order_id, refund_amount, reason, db.now()),
         )
         refund_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        try:
+            from backend_kernel import publish_business_event
+            publish_business_event(conn, topic="refund.initiated", aggregate="refund", aggregate_id=int(refund_id),
+                                   payload={"refund_id": int(refund_id), "order_id": int(order_id), "amount": int(refund_amount), "reason": reason[:1000]})
+        except Exception:
+            pass
         conn.commit()
     except sqlite3.IntegrityError:
         # A concurrent request may have created the same open refund between
@@ -85,7 +93,7 @@ def initiate_refund(conn, order_id: int, amount: Optional[int] = None,
     }
 
 
-def process_refund(conn, refund_id: int, provider_refund_id: Optional[str] = None) -> Dict[str, Any]:
+def _process_refund_impl(conn, refund_id: int, provider_refund_id: Optional[str] = None) -> Dict[str, Any]:
     """Execute/refetch a refund through the configured provider safely."""
     refund = conn.execute("SELECT * FROM order_refunds WHERE id = ?", (refund_id,)).fetchone()
     if not refund:
@@ -134,6 +142,12 @@ def process_refund(conn, refund_id: int, provider_refund_id: Optional[str] = Non
             "UPDATE order_refunds SET status='failed', failure_reason=?, failed_at=?, provider_refund_id=? WHERE id=?",
             (result.error_message or "Provider refund failed", db.now(), provider_id, refund_id),
         )
+        try:
+            from backend_kernel import publish_business_event
+            publish_business_event(conn, topic="refund.failed", aggregate="refund", aggregate_id=int(refund_id),
+                                   payload={"refund_id": int(refund_id), "order_id": int(order["id"]), "amount": int(refund["amount"]), "error": str(result.error_message or "Provider refund failed")[:500]})
+        except Exception:
+            pass
         conn.commit()
         return {"success": False, "refund_id": refund_id, "status": "failed", "error": result.error_message or "Provider refund failed"}
 
@@ -157,6 +171,12 @@ def process_refund(conn, refund_id: int, provider_refund_id: Optional[str] = Non
                 "UPDATE orders SET refunded_amount=?, razorpay_refund_id=? WHERE id=?",
                 (int(total), provider_id, order["id"]),
             )
+        try:
+            from backend_kernel import publish_business_event
+            publish_business_event(conn, topic="refund.processed", aggregate="refund", aggregate_id=int(refund_id),
+                                   payload={"refund_id": int(refund_id), "order_id": int(order["id"]), "amount": int(refund["amount"]), "provider_refund_id": provider_id})
+        except Exception:
+            pass
         conn.commit()
         return {"success": True, "refund_id": refund_id, "order_id": order["id"], "status": "processed", "provider_refund_id": provider_id, "amount": refund["amount"]}
 
@@ -168,6 +188,32 @@ def process_refund(conn, refund_id: int, provider_refund_id: Optional[str] = Non
     )
     conn.commit()
     return {"success": True, "refund_id": refund_id, "order_id": order["id"], "status": "pending", "provider_refund_id": provider_id, "amount": refund["amount"]}
+
+
+
+# Durable workflow wrapper: the existing refund implementation remains the
+# business-state authority; the workflow adds persistence/recovery around it.
+def process_refund(conn, refund_id: int, provider_refund_id: Optional[str] = None) -> Dict[str, Any]:
+    try:
+        from titan_workflows import DurableWorkflow, WorkflowStep
+        refund = conn.execute("SELECT * FROM order_refunds WHERE id=?", (int(refund_id),)).fetchone()
+        if not refund:
+            return {"success": False, "error": "Refund not found"}
+        flow = DurableWorkflow(conn, workflow_type="order.refund", aggregate_type="refund", aggregate_id=str(refund_id))
+        def execute(_conn, ctx):
+            result = _process_refund_impl(_conn, refund_id, provider_refund_id)
+            return {"result": result}
+        result = flow.run([WorkflowStep("process_refund", execute)])
+        if result.get("status") == "completed":
+            return dict(result.get("context") or {}).get("result") or _process_refund_impl(conn, refund_id, provider_refund_id)
+        if result.get("status") == "waiting":
+            return {"success": True, "refund_id": refund_id, "status": "pending", "workflow_id": result.get("workflow_id")}
+        return result
+    except Exception as exc:
+        logger.exception("Durable refund workflow failed")
+        # Preserve the historical API surface while the durable workflow state
+        # records the failure. Do not retry the provider call implicitly here.
+        return {"success": False, "refund_id": refund_id, "status": "failed", "error": str(exc)[:500]}
 
 
 def get_refund_status(conn, refund_id: int) -> Optional[Dict[str, Any]]:

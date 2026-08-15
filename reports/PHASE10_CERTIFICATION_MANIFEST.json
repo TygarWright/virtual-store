@@ -1,0 +1,127 @@
+{
+  "decision": "PENDING_EXTERNAL_EVIDENCE",
+  "external_certification": [
+    {
+      "name": "razorpay_checkout_refund_webhook",
+      "repository_harness": "scripts/certification/razorpay_lifecycle_drill.py",
+      "status": "HARNESS_READY_EXTERNAL_EVIDENCE_REQUIRED"
+    },
+    {
+      "name": "browser_mobile_accessibility",
+      "repository_harness": "scripts/certification/browser_contract_drill.py",
+      "status": "HARNESS_READY_EXTERNAL_EVIDENCE_REQUIRED"
+    },
+    {
+      "name": "concurrency_load_failure_injection",
+      "status": "HARNESS_READY_EXTERNAL_EVIDENCE_REQUIRED"
+    },
+    {
+      "name": "staging_migration_restore",
+      "status": "HARNESS_READY_EXTERNAL_EVIDENCE_REQUIRED"
+    },
+    {
+      "name": "deployment_rollback",
+      "repository_harness": "scripts/certification/rollback_rehearsal.py",
+      "status": "HARNESS_READY_EXTERNAL_EVIDENCE_REQUIRED"
+    },
+    {
+      "name": "adversarial_security",
+      "repository_harness": "scripts/certification/adversarial_business_logic_drill.py",
+      "status": "HARNESS_READY_EXTERNAL_EVIDENCE_REQUIRED"
+    },
+    {
+      "name": "production_operations",
+      "repository_harness": "scripts/certification/production_ops_smoke.py",
+      "status": "HARNESS_READY_EXTERNAL_EVIDENCE_REQUIRED"
+    },
+    {
+      "name": "performance_load",
+      "repository_harness": "scripts/certification/performance_budget_contract.py",
+      "status": "HARNESS_READY_EXTERNAL_EVIDENCE_REQUIRED"
+    }
+  ],
+  "generated_at": "2026-08-15T18:47:44.256093+00:00",
+  "repository_evidence": [
+    {
+      "name": "deployment_contract",
+      "path": "render.yaml",
+      "present": true
+    },
+    {
+      "name": "reconciliation_cron_contract",
+      "path": "render-reconciliation-cron.yaml",
+      "present": true
+    },
+    {
+      "name": "phase10_preflight",
+      "path": "scripts/phase10_preflight.py",
+      "present": true
+    },
+    {
+      "name": "render_parity_smoke",
+      "path": "scripts/render_smoke.py",
+      "present": true
+    },
+    {
+      "name": "phase10_gate",
+      "path": "scripts/verify_titan_phase10.py",
+      "present": true
+    },
+    {
+      "name": "security_gate",
+      "path": "scripts/security_regression_suite.py",
+      "present": true
+    },
+    {
+      "name": "asvs_gate",
+      "path": "scripts/asvs_evidence.py",
+      "present": true
+    },
+    {
+      "name": "disaster_recovery_drill",
+      "path": "scripts/disaster_recovery_drill.py",
+      "present": true
+    },
+    {
+      "name": "staging_migration_restore_drill",
+      "path": "scripts/certification/staging_migration_restore_drill.py",
+      "present": true
+    },
+    {
+      "name": "concurrency_failure_drill",
+      "path": "scripts/certification/concurrency_failure_drill.py",
+      "present": true
+    },
+    {
+      "name": "razorpay_lifecycle_drill",
+      "path": "scripts/certification/razorpay_lifecycle_drill.py",
+      "present": true
+    },
+    {
+      "name": "browser_contract_drill",
+      "path": "scripts/certification/browser_contract_drill.py",
+      "present": true
+    },
+    {
+      "name": "rollback_rehearsal",
+      "path": "scripts/certification/rollback_rehearsal.py",
+      "present": true
+    },
+    {
+      "name": "adversarial_business_logic_drill",
+      "path": "scripts/certification/adversarial_business_logic_drill.py",
+      "present": true
+    },
+    {
+      "name": "production_ops_smoke",
+      "path": "scripts/certification/production_ops_smoke.py",
+      "present": true
+    },
+    {
+      "name": "performance_budget_contract",
+      "path": "scripts/certification/performance_budget_contract.py",
+      "present": true
+    }
+  ],
+  "schema_version": 1
+}

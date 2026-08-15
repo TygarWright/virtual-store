@@ -13,6 +13,9 @@ import shutil
 import sqlite3
 import sys
 import tempfile
+import hashlib
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -46,6 +49,70 @@ def verify(path: str) -> tuple[bool, list[str]]:
     return not problems, problems
 
 
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _db_fingerprint(path: str) -> str:
+    with _connect(path) as conn:
+        rows = conn.execute(
+            "SELECT name, type, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+        ).fetchall()
+        table_counts = []
+        for row in rows:
+            if row[1] == "table":
+                table_counts.append((row[0], int(conn.execute(f"SELECT COUNT(*) FROM [{row[0].replace(chr(93), chr(93)+chr(93))}]" ).fetchone()[0])))
+        payload = {"schema": [(r[0], r[1], r[2]) for r in rows], "counts": table_counts}
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _manifest_path(db_path: Path) -> Path:
+    return db_path.with_suffix(db_path.suffix + ".manifest.json")
+
+
+def _write_manifest(db_path: Path, *, source: str) -> Path:
+    manifest = {
+        "format": 1,
+        "artifact": db_path.name,
+        "source": source,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "size_bytes": db_path.stat().st_size,
+        "sha256": _sha256(db_path),
+        "database_fingerprint": _db_fingerprint(str(db_path)),
+    }
+    out = _manifest_path(db_path)
+    out.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    return out
+
+
+def verify_manifest(db_path: str) -> tuple[bool, list[str]]:
+    db = Path(db_path)
+    manifest_path = _manifest_path(db)
+    if not manifest_path.exists():
+        return True, []
+    problems=[]
+    try:
+        data=json.loads(manifest_path.read_text())
+        if int(data.get("format",0)) != 1:
+            problems.append("unsupported backup manifest format")
+        if data.get("sha256") != _sha256(db):
+            problems.append("backup SHA-256 does not match manifest")
+        if data.get("size_bytes") != db.stat().st_size:
+            problems.append("backup size does not match manifest")
+        ok, integrity_problems = verify(str(db))
+        if not ok:
+            problems.extend(integrity_problems)
+        if data.get("database_fingerprint") != _db_fingerprint(str(db)):
+            problems.append("database fingerprint does not match manifest")
+    except Exception as exc:
+        problems.append(f"invalid backup manifest: {exc}")
+    return not problems, problems
+
 def backup(source: str, destination: str) -> Path:
     src = Path(source)
     dst = Path(destination)
@@ -67,6 +134,12 @@ def backup(source: str, destination: str) -> Path:
     if not ok:
         dst.unlink(missing_ok=True)
         raise RuntimeError("Backup verification failed: " + "; ".join(problems))
+    _write_manifest(dst, source=str(src))
+    ok, problems = verify_manifest(str(dst))
+    if not ok:
+        dst.unlink(missing_ok=True)
+        _manifest_path(dst).unlink(missing_ok=True)
+        raise RuntimeError("Backup manifest verification failed: " + "; ".join(problems))
     return dst
 
 
@@ -78,6 +151,9 @@ def restore(backup_path: str, destination: str, *, force: bool = False) -> Path:
     ok, problems = verify(str(src))
     if not ok:
         raise RuntimeError("Refusing to restore an invalid backup: " + "; ".join(problems))
+    ok, problems = verify_manifest(str(src))
+    if not ok:
+        raise RuntimeError("Refusing to restore a backup with an invalid manifest: " + "; ".join(problems))
     if dst.exists() and not force:
         raise FileExistsError(f"Destination exists: {dst}. Use --force to replace it.")
 
@@ -90,6 +166,14 @@ def restore(backup_path: str, destination: str, *, force: bool = False) -> Path:
         if not ok:
             raise RuntimeError("Restored copy failed verification: " + "; ".join(problems))
         os.replace(tmp, dst)
+        manifest = _manifest_path(src)
+        if manifest.exists():
+            _manifest_path(dst).write_text(manifest.read_text())
+            ok, problems = verify_manifest(str(dst))
+            if not ok:
+                raise RuntimeError("Restored database failed manifest verification: " + "; ".join(problems))
+        else:
+            _write_manifest(dst, source=str(src))
         return dst
     finally:
         tmp.unlink(missing_ok=True)
@@ -105,6 +189,9 @@ def main(argv: list[str] | None = None) -> int:
     p_backup = sub.add_parser("backup")
     p_backup.add_argument("database")
     p_backup.add_argument("destination")
+
+    p_manifest = sub.add_parser("verify-manifest")
+    p_manifest.add_argument("database")
 
     p_restore = sub.add_parser("restore")
     p_restore.add_argument("backup")
@@ -125,6 +212,14 @@ def main(argv: list[str] | None = None) -> int:
             out = backup(args.database, args.destination)
             print(f"Backup verified: {out}")
             return 0
+        if args.command == "verify-manifest":
+            ok, problems = verify_manifest(args.database)
+            if ok:
+                print(f"OK: backup manifest {args.database}")
+                return 0
+            for problem in problems:
+                print(f"ERROR: {problem}", file=sys.stderr)
+            return 1
         if args.command == "restore":
             out = restore(args.backup, args.destination, force=args.force)
             print(f"Restore verified: {out}")

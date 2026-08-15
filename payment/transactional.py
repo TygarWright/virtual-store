@@ -244,6 +244,17 @@ def confirm_order_payment_tx(conn, order_id: int,
                 (item["quantity"], item["product_id"], item["quantity"]),
             )
 
+    try:
+        from backend_kernel import publish_business_event
+        publish_business_event(conn, topic="order.paid" if auto_message is None else "order.delivered", aggregate="order", aggregate_id=int(order["id"]),
+                               payload={"order_id": int(order["id"]), "order_ref": str(order["order_ref"]), "payment_mode": payment_mode, "status": "delivered" if auto_message else "paid"})
+        for item in (order_items or []):
+            if item["product_id"]:
+                publish_business_event(conn, topic="inventory.decremented", aggregate="product", aggregate_id=int(item["product_id"]),
+                                       payload={"product_id": int(item["product_id"]), "order_id": int(order["id"]), "quantity": int(item["quantity"]), "reason": "order_paid"})
+    except Exception:
+        pass
+
     # Note: Commit is handled by the transactional context manager
 
     try:

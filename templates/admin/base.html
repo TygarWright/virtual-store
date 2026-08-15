@@ -11,9 +11,9 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/titan-ui.css') }}?v={{ static_version }}">
 </head>
-<body class="titan-admin" data-liquid-glass="1">
+<body class="titan-admin">
 <div class="admin-shell">
-  <aside class="admin-sidebar titan-liquid-glass titan-liquid-glass--sidebar" id="adminSidebar">
+  <aside class="admin-sidebar" id="adminSidebar">
     <div class="admin-sidebar__header">
       <a href="{{ url_for('admin.admin_dashboard') }}" class="admin-sidebar__brand">{{ settings.site_name }}</a>
     </div>
@@ -89,6 +89,7 @@
       </a>
       {% endif %}
       {% if admin_can('audit.view') %}
+      <a href="{{ url_for('admin.admin_approvals') }}" class="{{ 'active' if admin_nav_active('approvals') }}" onclick="closeAdminMenu()">{{ icon("shield") }} Approvals</a>
       <a href="{{ url_for('admin.admin_audit_log') }}" class="{{ 'active' if admin_nav_active('audit') }}" onclick="closeAdminMenu()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
         Audit Log
@@ -114,8 +115,15 @@
       {% endif %}
       {% if admin_can('audit.view') %}
       <a href="{{ url_for('admin.admin_guardian') }}" class="{{ 'active' if admin_nav_active('guardian') }}" onclick="closeAdminMenu()">{{ icon("shield") }} Guardian</a>
+      <a href="{{ url_for('admin.admin_guardian_detectors') }}" class="{{ 'active' if admin_nav_active('guardian') }}" onclick="closeAdminMenu()">{{ icon("settings") }} Detectors</a>
+      <a href="{{ url_for('admin.admin_reconciliation') }}" class="{{ 'active' if admin_nav_active('reconciliation') }}" onclick="closeAdminMenu()">{{ icon("activity") }} Reconciliation</a>
+      <a href="{{ url_for('admin.admin_observability_policies') }}" class="{{ 'active' if admin_nav_active('observability') }}" onclick="closeAdminMenu()">{{ icon("settings") }} Alert policies</a>
+      <a href="{{ url_for('admin.admin_observability_slo') }}" class="{{ 'active' if admin_nav_active('observability') }}" onclick="closeAdminMenu()">{{ icon("settings") }} Service health</a>
+      <a href="{{ url_for('admin.admin_observability') }}" class="{{ 'active' if admin_nav_active('observability') }}" onclick="closeAdminMenu()">{{ icon("activity") }} Observability</a>
+      <a href="{{ url_for('admin.admin_workflows') }}" class="{{ 'active' if admin_nav_active('workflows') }}" onclick="closeAdminMenu()">{{ icon("activity") }} Workflows</a>
       {% endif %}
       {% if admin_can('analytics.view') %}
+      <a href="{{ url_for('admin.admin_analytics') }}" class="{{ 'active' if admin_nav_active('analytics') }}" onclick="closeAdminMenu()">{{ icon("chart") }} Analytics</a>
       <a href="{{ url_for('admin.admin_simulation_lab') }}" class="{{ 'active' if admin_nav_active('simulation') }}" onclick="closeAdminMenu()">{{ icon("flask") }} Simulation Lab</a>
       {% endif %}
       {% if admin_can('tickets.create') %}
@@ -123,6 +131,18 @@
       {% endif %}
       {% if admin_can('team.chat') %}
       <a href="{{ url_for('admin.admin_team_hub') }}" class="{{ 'active' if admin_nav_active('team_hub') }}" onclick="closeAdminMenu()">{{ icon("chat") }} Team Hub</a>
+      {% if admin_can('customers.view') %}
+      <a href="{{ url_for('admin.admin_support_cockpit') }}" class="{{ 'active' if admin_nav_active('support') }}" onclick="closeAdminMenu()">{{ icon("life-buoy") }} Support Cockpit</a>
+      {% endif %}
+      {% endif %}
+      {% if admin_can('analytics.view') %}
+      <a href="{{ url_for('admin.admin_institutional_memory') }}" class="{{ 'active' if admin_nav_active('memory') }}" onclick="closeAdminMenu()">{{ icon("note") }} Institutional Memory</a>
+      {% endif %}
+      {% if admin_can('settings.manage') %}
+      <a href="{{ url_for('admin.admin_feature_flags') }}" class="{{ 'active' if admin_nav_active('flags') }}" onclick="closeAdminMenu()">{{ icon("settings") }} Feature Flags</a>
+      {% endif %}
+      {% if admin_can('analytics.view') %}
+      <a href="{{ url_for('admin.admin_experiments') }}" class="{{ 'active' if admin_nav_active('experiments') }}" onclick="closeAdminMenu()">{{ icon("note") }} Experiments</a>
       {% endif %}
       {% if admin_can('content.manage') %}
       <a href="{{ url_for('admin.admin_notices') }}" class="{{ 'active' if admin_nav_active('notices') }}" onclick="closeAdminMenu()">{{ icon("megaphone") }} Site Notices</a>
@@ -144,7 +164,7 @@
   </aside>
   <div class="admin-command-palette" id="adminCommandPalette" hidden aria-hidden="true">
   <div class="admin-command-palette__backdrop" data-command-close></div>
-  <section class="admin-command-palette__panel titan-liquid-glass titan-liquid-glass--dialog" role="dialog" aria-modal="true" aria-labelledby="adminCommandTitle">
+  <section class="admin-command-palette__panel" role="dialog" aria-modal="true" aria-labelledby="adminCommandTitle">
     <div class="admin-command-palette__head">
       <div>
         <div class="admin-command-palette__eyebrow">Quick navigation</div>
@@ -302,6 +322,8 @@ function toggleAdminMenu() {
     ['Products','admin.admin_products','products'],
     ['Customers','admin.admin_customers','customers'],
     ['Guardian','admin.admin_guardian','guardian'],
+    ['Reconciliation','admin.admin_reconciliation','reconciliation'],
+    ['Workflows','admin.admin_workflows','workflows'],
     ['Simulation Lab','admin.admin_simulation_lab','simulation'],
     ['Training Mode','admin.admin_training','training'],
     ['Team Hub','admin.admin_team_hub','team_hub'],

@@ -43,7 +43,7 @@
         <small style="color:var(--grey-500); display:block; margin-top:2px;">Check payment</small>
       {% endif %}
     </td>
-    <td><a href="{{ url_for('admin.admin_order_detail', order_id=o.id) }}" class="btn btn--outline btn--sm">View</a></td>
+    <td><a href="{{ url_for('admin.admin_order_detail', order_id=o.id) }}" class="btn btn--outline btn--sm">View</a> <a href="{{ url_for('admin.admin_team_hub_context', type='order', id=o.id, title='Order '+o.order_ref) }}" class="btn btn--outline btn--sm">Discuss</a></td>
   </tr>
   {% endfor %}
 </table>

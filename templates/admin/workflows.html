@@ -1,0 +1,13 @@
+{% extends "admin/base.html" %}
+{% block title %}Workflows{% endblock %}
+{% block content %}
+<div class="admin-topbar"><div><h1>Commerce Workflows</h1><p class="muted">Durable state for critical operations. Failures and recoveries remain inspectable instead of disappearing into logs.</p></div></div>
+{% if workflows %}
+<div class="stack">
+{% for w in workflows %}
+<section class="card-box"><div class="row-between"><div><strong>{{ w.workflow_type }}</strong><div class="muted">{{ w.aggregate_type }} #{{ w.aggregate_id }}</div></div><div><span class="status-pill">{{ w.status }}</span> <span class="muted">attempt {{ w.attempt_count }}</span>{% if w.status in ['failed','waiting','running'] and w.workflow_type == 'order.payment_confirmation' %}<form method="POST" action="{{ url_for('admin.admin_workflow_recover', workflow_id=w.workflow_id) }}" class="inline-form" style="display:inline-block;margin-left:.5rem"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="admin-btn admin-btn--small" type="submit">Recover</button></form>{% endif %}</div></div>
+{% if w.error %}<p class="error-text">{{ w.error }}</p>{% endif %}
+<div class="table-wrap"><table class="admin-table"><thead><tr><th>Step</th><th>Status</th><th>Started</th><th>Completed</th><th>Error</th></tr></thead><tbody>{% for st in steps_by[w.workflow_id] %}<tr><td>{{ st.step_index + 1 }}. {{ st.step_name }}</td><td>{{ st.status }}</td><td>{{ st.started_at or '—' }}</td><td>{{ st.completed_at or '—' }}</td><td>{{ st.error or '—' }}</td></tr>{% endfor %}</tbody></table></div></section>
+{% endfor %}</div>
+{% else %}<section class="card-box"><p>No workflow runs yet.</p></section>{% endif %}
+{% endblock %}

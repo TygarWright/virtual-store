@@ -1,17 +1,15 @@
-# Virtual Store TITAN — Full Ecosystem Round 9
+# Virtual Store TITAN — Round 59
 
-This release combines the Round 7 frontend experience layer with the Round 8 backend masterpiece layer.
+Round 59 closes two remaining Phase 10 certification-engineering PDs:
 
-Principles:
-- Original TYG4R Virtual Store remains the product DNA.
-- TITAN hardening and business controls are preserved.
-- Backend kernel adds domain events, generic idempotency, schema-aware backend capability diagnostics.
-- Frontend keeps the original visual language while using the TITAN experience layer.
+1. External evidence registry + tamper verification
+2. Final Phase 10 GO/NO-GO gate
 
-Verification:
-- PRE-9 TITAN gate: PASS
-- Phase 9 static gate: PASS
-- Phase 10 static gate: PASS
+Repository acceptance:
+- Round 59 certification test: PASS
 - Python compilation: PASS
+- Evidence verifier: PASS
+- Final gate: designed to fail closed without real external evidence
+- Release hygiene: PASS
 
-Live/staging certification is still required for payment/webhook flows, browser/device UX, load, migration/restore rehearsal, deployment, and rollback.
+Live Render/Razorpay/browser/load/security evidence remains external and cannot be fabricated by this repository release.

@@ -1,0 +1,116 @@
+{
+  "checks": [
+    {
+      "evidence": [
+        "app.py",
+        "blueprints/",
+        "domains/",
+        "workflow engine"
+      ],
+      "id": "V1",
+      "name": "Architecture and separation",
+      "status": "PASS"
+    },
+    {
+      "id": "V2",
+      "name": "Authentication",
+      "status": "PASS"
+    },
+    {
+      "id": "V3",
+      "name": "Session and token handling",
+      "status": "PASS"
+    },
+    {
+      "id": "V4",
+      "name": "Access control",
+      "status": "PASS"
+    },
+    {
+      "id": "V5",
+      "name": "Server-side validation",
+      "status": "PASS"
+    },
+    {
+      "id": "V6",
+      "name": "Cryptography and password hashing",
+      "status": "REVIEW"
+    },
+    {
+      "id": "V7",
+      "name": "Logging and error handling",
+      "status": "PASS"
+    },
+    {
+      "evidence": [
+        "release artifact gate",
+        "secret configuration guards"
+      ],
+      "id": "V8",
+      "name": "Data protection and release hygiene",
+      "status": "PASS"
+    },
+    {
+      "id": "V9",
+      "name": "Transport/webhook verification",
+      "status": "PASS"
+    },
+    {
+      "id": "V10",
+      "name": "File/resource handling",
+      "status": "PASS"
+    },
+    {
+      "id": "V11",
+      "name": "Business logic protections",
+      "status": "PASS"
+    },
+    {
+      "id": "V12",
+      "name": "Resource controls",
+      "status": "PASS"
+    },
+    {
+      "id": "V13",
+      "name": "API/web services",
+      "status": "PASS"
+    },
+    {
+      "id": "V14",
+      "name": "Secure configuration",
+      "status": "PASS"
+    },
+    {
+      "id": "TEST-AUTHZ",
+      "name": "Authorization adversarial E2E",
+      "reason": "Requires running application and seeded role accounts.",
+      "status": "PENDING_ENVIRONMENT"
+    },
+    {
+      "id": "TEST-BUSINESS",
+      "name": "Business-logic abuse/concurrency testing",
+      "reason": "Requires dependency-complete runtime and concurrent test clients.",
+      "status": "PENDING_ENVIRONMENT"
+    },
+    {
+      "id": "V11-REG",
+      "name": "Deterministic invariant registry",
+      "status": "PASS"
+    },
+    {
+      "id": "TEST-SESSION",
+      "name": "Session/rate-limit regression testing",
+      "reason": "Requires real HTTP client/runtime.",
+      "status": "PENDING_ENVIRONMENT"
+    }
+  ],
+  "project": "Virtual Store TITAN",
+  "route_count_estimate": 154,
+  "scope": "ASVS-inspired evidence report; not formal certification",
+  "summary": {
+    "fail": 0,
+    "pass": 14,
+    "pending_environment": 3,
+    "review": 1
+  }
+}
