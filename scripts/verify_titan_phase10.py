@@ -33,6 +33,10 @@ for forbidden in ("OTP_DEV_MODE=true", "ALLOW_TEST_GATEWAY=true"):
     if forbidden in ci:
         errors.append(f"unsafe CI production-validation setting found: {forbidden}")
 
+ui_gate = ROOT / "scripts/check_ui_quality.py"
+if not ui_gate.exists():
+    errors.append("missing UI quality gate: scripts/check_ui_quality.py")
+
 config = (ROOT / "config.py").read_text(encoding="utf-8")
 for needle in (
     'SECRET_KEY is required',

@@ -55,7 +55,7 @@
     // Show the auto-coupon banner
     if (autoCouponBanner) {
       autoCouponBanner.innerHTML =
-        '<div class="auto-coupon-badge">🎁 Auto-applied</div>' +
+        '<div class="auto-coupon-badge"><svg class="icon icon--sm" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8"/><path d="M2 7h20v5H2z"/><path d="M12 7v15"/><path d="M12 7H8.5a2.5 2.5 0 1 1 0-5C10 2 12 7 12 7Z"/><path d="M12 7h3.5a2.5 2.5 0 1 0 0-5C14 2 12 7 12 7Z"/></svg> Auto-applied</div>' +
         '<div class="auto-coupon-info">' +
           '<strong>' + coupon.code + '</strong> — ' + coupon.description +
           '. You save ' + currency + coupon.discount_amount.toLocaleString() + '!' +
@@ -109,7 +109,7 @@
         var c = data.best;
         var currency = buyBtn.dataset.currency;
         autoCouponBox.innerHTML =
-          '<div class="auto-coupon-badge">🎁 Auto-applied</div>' +
+          '<div class="auto-coupon-badge"><svg class="icon icon--sm" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8"/><path d="M2 7h20v5H2z"/><path d="M12 7v15"/><path d="M12 7H8.5a2.5 2.5 0 1 1 0-5C10 2 12 7 12 7Z"/><path d="M12 7h3.5a2.5 2.5 0 1 0 0-5C14 2 12 7 12 7Z"/></svg> Auto-applied</div>' +
           '<div class="auto-coupon-info">' +
             '<strong>' + c.code + '</strong> — ' + c.description +
             '. You pay ' + currency + c.final_price.toLocaleString() +

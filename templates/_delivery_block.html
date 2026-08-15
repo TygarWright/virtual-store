@@ -59,12 +59,12 @@
         <button class="btn btn--sm btn--outline delivery-key__reveal-btn"
                 data-delivery-reveal=""
                 data-original-html="Reveal" style="margin-left:0.4rem;">
-          👁 Reveal
+          <span class="icon icon--sm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg></span>Reveal
         </button>
         <button class="btn btn--sm btn--outline"
                 data-delivery-copy="{{ l }}"
                 data-original-html="Copy" style="margin-left:0.3rem;">
-          📋 Copy
+          <span class="icon icon--sm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4"/></svg></span>Copy
         </button>
       </div>
       {% endif %}
@@ -98,7 +98,7 @@
       <button class="btn btn--sm btn--outline delivery-copy-btn"
               data-delivery-copy="{{ msg }}"
               data-original-html="Copy All">
-        📋 Copy All
+        <span class="icon icon--sm" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4"/></svg></span>Copy All
       </button>
     </div>
   {% endif %}

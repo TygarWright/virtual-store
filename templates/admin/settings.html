@@ -152,7 +152,7 @@
         <input type="text" name="greeting_date[]" value="{{ g.date }}" placeholder="MMDD" style="width:65px; text-align:center;" maxlength="4" inputmode="numeric">
         <span style="opacity:0.4;">→</span>
         <input type="text" name="greeting_label[]" value="{{ g.label }}" placeholder="Label (e.g. Diwali)" style="flex:1; min-width:100px;">
-        <input type="text" name="greeting_msg[]" value="{{ g.msg or '' }}" placeholder='Message (e.g. "Happy {label}, {name}! 🎉")' style="flex:2; min-width:160px;">
+        <input type="text" name="greeting_msg[]" value="{{ g.msg or '' }}" placeholder='Message (e.g. "Happy {label}, {name}! {icon}" )' style="flex:2; min-width:160px;">
         <button type="button" class="btn btn--sm btn--outline" onclick="this.parentElement.remove()" style="background:none;border:1px solid var(--grey-300);border-radius:6px;cursor:pointer;" aria-label="Remove" title="Remove">{{ icon("x", 14) }}</button>
       </div>
       {% endfor %}
@@ -161,9 +161,9 @@
     <details style="margin-top:0.7rem; opacity:0.7; font-size:0.8rem;">
       <summary style="cursor:pointer;">Template ideas</summary>
     <div style="margin-top:0.4rem; line-height:1.6;">
-        <code>Happy {label}, {name}! 🎉</code> — festival<br>
+        <code>Happy {label}, {name}!</code> — festival<br>
         <code>Welcome, {name}! Enjoy your {label}</code> — first visit<br>
-        <code>🎂 Happy Birthday, {name}!</code> — birthday<br>
+        <code>Happy Birthday, {name}!</code> — birthday<br>
         <code>{name}, you've been with us for {label} years! ❤️</code> — anniversary<br>
       </div>
     </details>
@@ -213,7 +213,7 @@ function addGreetingRow() {
   r.innerHTML = '<input type="text" name="greeting_date[]" placeholder="MMDD" style="width:65px;text-align:center;" maxlength="4" inputmode="numeric">' +
     '<span style="opacity:0.4;">→</span>' +
     '<input type="text" name="greeting_label[]" placeholder="Label (e.g. Diwali)" style="flex:1; min-width:100px;">' +
-    '<input type="text" name="greeting_msg[]" placeholder=\'Message (e.g. "Happy {label}, {name}! 🎉")\' style="flex:2; min-width:160px;">' +
+    '<input type="text" name="greeting_msg[]" placeholder=\'Message (e.g. "Happy {label}, {name}!")\' style="flex:2; min-width:160px;">' +
     '<button type="button" onclick="this.parentElement.remove()" style="background:none;border:1px solid var(--grey-300);border-radius:6px;cursor:pointer;padding:2px 8px;" aria-label="Remove" title="Remove">{{ icon("x", 14) }}</button>';
   d.appendChild(r);
 }

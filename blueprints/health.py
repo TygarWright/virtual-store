@@ -3,6 +3,7 @@ Health Check Blueprint
 """
 from flask import Blueprint, jsonify, current_app
 from database import get_db
+from schema_contract import missing_columns
 
 health_bp = Blueprint('health', __name__)
 
@@ -18,8 +19,15 @@ def readyz():
     """
     conn = get_db()
     try:
-        # Try to execute a simple query to check the database.
+        # Prove both connectivity and the critical schema contract.  A database
+        # that answers SELECT 1 but is missing a column is not ready to serve
+        # admin/payment traffic safely.
         conn.execute("SELECT 1")
+        missing = missing_columns(conn)
+        if missing:
+            names = [f"{item.table}.{item.name}" for item in missing]
+            current_app.logger.error("Readiness failed: schema contract incomplete: %s", names)
+            return jsonify({"status": "error", "reason": "schema_incomplete", "missing": names}), 503
         return jsonify({"status": "ok"}), 200
     except Exception as e:
         current_app.logger.exception("Readiness check failed")

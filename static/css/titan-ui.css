@@ -319,3 +319,157 @@ button:disabled, input:disabled, select:disabled, textarea:disabled { cursor: no
 .admin-command-palette__foot { border-top:1px solid var(--titan-line); padding:.65rem 1.25rem; color:#7c796f; font-size:.68rem; display:flex; gap:.45rem; }
 .admin-command-palette__foot span { color:#333; border:1px solid #ddd; border-radius:4px; padding:.08rem .28rem; }
 @media (max-width:760px){ .admin-command-palette{padding:6vh .7rem .7rem;} .admin-command-palette__panel{border-radius:10px;} }
+
+
+/* ========================================================================
+   TITAN LIQUID GLASS
+   ------------------------------------------------------------------------
+   Apple-inspired translucent material for a restrained subset of surfaces.
+   Performance rules:
+   - Only opt-in surfaces receive backdrop-filter.
+   - No full-page filter / paint containment tricks.
+   - Static highlight layers use CSS gradients, not animation.
+   - Reduced-motion and low-transparency fallbacks are provided.
+   - Dense data surfaces remain opaque for readability and GPU efficiency.
+   ======================================================================== */
+:root {
+  --titan-glass-radius: 22px;
+  --titan-glass-border: rgba(255,255,255,.26);
+  --titan-glass-fill: rgba(255,255,255,.72);
+  --titan-glass-fill-dark: rgba(18,18,18,.74);
+  --titan-glass-blur: 22px;
+  --titan-glass-sat: 155%;
+  --titan-glass-shadow:
+    0 18px 48px rgba(0,0,0,.10),
+    0 2px 10px rgba(0,0,0,.06),
+    inset 0 1px 0 rgba(255,255,255,.55),
+    inset 0 -1px 0 rgba(0,0,0,.05);
+}
+
+.titan-liquid-glass {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+  border: 1px solid var(--titan-glass-border);
+  border-radius: var(--titan-glass-radius);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.34), rgba(255,255,255,.08) 46%, rgba(255,255,255,.18)),
+    var(--titan-glass-fill);
+  box-shadow: var(--titan-glass-shadow);
+  -webkit-backdrop-filter: blur(var(--titan-glass-blur)) saturate(var(--titan-glass-sat));
+  backdrop-filter: blur(var(--titan-glass-blur)) saturate(var(--titan-glass-sat));
+  background-clip: padding-box;
+}
+
+/* The optical layer: a static edge sheen + four corner light lobes. */
+.titan-liquid-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(90px 60px at 0% 0%, rgba(255,255,255,.42), transparent 72%),
+    radial-gradient(85px 60px at 100% 0%, rgba(255,255,255,.22), transparent 72%),
+    radial-gradient(85px 60px at 100% 100%, rgba(255,255,255,.10), transparent 72%),
+    radial-gradient(85px 60px at 0% 100%, rgba(255,255,255,.16), transparent 72%),
+    linear-gradient(112deg, transparent 0 44%, rgba(255,255,255,.10) 49%, transparent 54%);
+  opacity: .9;
+  mix-blend-mode: screen;
+}
+
+/* Subtle inner refraction/rim. The effect comes from highlight displacement around corners,
+   avoiding an expensive page-wide SVG displacement filter. */
+.titan-liquid-glass::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.20), transparent 18% 82%, rgba(0,0,0,.05)),
+    radial-gradient(120% 80% at 50% -15%, rgba(255,255,255,.16), transparent 55%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.10),
+    inset 0 10px 24px rgba(255,255,255,.04),
+    inset 0 -14px 30px rgba(0,0,0,.035);
+  opacity: .8;
+}
+
+.titan-liquid-glass > * { position: relative; z-index: 1; }
+
+.titan-liquid-glass--nav {
+  /* Navigation is the primary “floating glass” surface. */
+  border-radius: 0 0 20px 20px;
+  border-top: 0;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.72), rgba(255,255,255,.58)),
+    rgba(255,255,255,.72);
+  box-shadow:
+    0 10px 34px rgba(0,0,0,.08),
+    0 1px 0 rgba(255,255,255,.70),
+    inset 0 -1px 0 rgba(0,0,0,.06);
+}
+
+.titan-liquid-glass--sidebar {
+  border-radius: 0 24px 24px 0;
+  border-left: 0;
+  border-top: 0;
+  border-bottom: 0;
+  border-right-color: rgba(255,255,255,.12);
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.12), rgba(255,255,255,.035)),
+    rgba(11,11,11,.74);
+  box-shadow:
+    18px 0 48px rgba(0,0,0,.20),
+    inset -1px 0 rgba(255,255,255,.07),
+    inset 0 1px rgba(255,255,255,.05);
+  -webkit-backdrop-filter: blur(26px) saturate(125%);
+  backdrop-filter: blur(26px) saturate(125%);
+}
+
+.titan-liquid-glass--sidebar::before {
+  opacity: .55;
+}
+
+.titan-liquid-glass--dialog {
+  border-radius: 26px;
+  background: rgba(255,255,255,.78);
+  box-shadow:
+    0 28px 90px rgba(0,0,0,.20),
+    0 4px 20px rgba(0,0,0,.10),
+    inset 0 1px rgba(255,255,255,.7),
+    inset 0 -1px rgba(0,0,0,.05);
+}
+
+/* Browser support / user preference fallback. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .titan-liquid-glass { background: rgba(255,255,255,.94); }
+  .titan-liquid-glass--sidebar { background: rgba(12,12,12,.97); }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .titan-liquid-glass {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: rgba(255,255,255,.96);
+  }
+  .titan-liquid-glass--sidebar { background: rgba(10,10,10,.98); }
+  .titan-liquid-glass::before,
+  .titan-liquid-glass::after { opacity: .35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .titan-liquid-glass { transition: none !important; }
+}
+
+@media (max-width: 760px) {
+  .titan-liquid-glass--nav { border-radius: 0 0 16px 16px; }
+  .titan-liquid-glass--sidebar { border-radius: 0 18px 18px 0; }
+}
+
+/* Keep glass away from dense data surfaces and huge scrolling regions. */
+.table-wrap .titan-liquid-glass,
+.table-responsive .titan-liquid-glass,
+.admin-table .titan-liquid-glass { -webkit-backdrop-filter: none; backdrop-filter: none; }

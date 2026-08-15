@@ -11,9 +11,9 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/titan-ui.css') }}?v={{ static_version }}">
 </head>
-<body class="titan-admin">
+<body class="titan-admin" data-liquid-glass="1">
 <div class="admin-shell">
-  <aside class="admin-sidebar" id="adminSidebar">
+  <aside class="admin-sidebar titan-liquid-glass titan-liquid-glass--sidebar" id="adminSidebar">
     <div class="admin-sidebar__header">
       <a href="{{ url_for('admin.admin_dashboard') }}" class="admin-sidebar__brand">{{ settings.site_name }}</a>
     </div>
@@ -144,7 +144,7 @@
   </aside>
   <div class="admin-command-palette" id="adminCommandPalette" hidden aria-hidden="true">
   <div class="admin-command-palette__backdrop" data-command-close></div>
-  <section class="admin-command-palette__panel" role="dialog" aria-modal="true" aria-labelledby="adminCommandTitle">
+  <section class="admin-command-palette__panel titan-liquid-glass titan-liquid-glass--dialog" role="dialog" aria-modal="true" aria-labelledby="adminCommandTitle">
     <div class="admin-command-palette__head">
       <div>
         <div class="admin-command-palette__eyebrow">Quick navigation</div>

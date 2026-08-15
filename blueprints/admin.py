@@ -2584,7 +2584,28 @@ def admin_team_toggle(admin_id):
 def admin_guardian():
     from governance_service import run_guardian_scan
     conn = db.get_db()
+
+    # Never trust migration bookkeeping for a control-plane page. Repair the
+    # live schema first, then verify it before executing any Guardian query.
     db.ensure_business_exception_columns(conn)
+    if not db.guardian_schema_ready(conn):
+        # A remote libSQL/Turso connection can briefly retain stale schema
+        # metadata after additive DDL. Re-open the worker connection once and
+        # perform the repair again instead of exposing a 500 to the operator.
+        try:
+            reset = getattr(db, "reset_turso_connection", None)
+            if reset:
+                reset()
+            conn = db.get_db()
+            db.ensure_business_exception_columns(conn)
+        except Exception:
+            current_app.logger.exception("Guardian schema repair retry failed")
+
+    if not db.guardian_schema_ready(conn):
+        conn.close()
+        flash("Guardian is temporarily unavailable because its database schema could not be repaired. Check the deployment logs.", "error")
+        return redirect(url_for("admin.admin_dashboard"))
+
     result = run_guardian_scan(conn)
     exceptions = conn.execute(
         """SELECT e.*, a.username AS assignee

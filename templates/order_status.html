@@ -11,7 +11,7 @@
 
     {% if prefill_ref and order and order.status == 'paid' %}
     <div class="flash flash--success" style="text-align:center; margin-bottom:2rem;">
-      {% if order.payment_mode == 'test' %}🧪 Testing mode order placed. No payment was collected, but your order is now in the system and notifications should still work.{% else %}🎉 Thank you! Your payment was received. Save this page to check on your delivery.{% endif %}
+      {% if order.payment_mode == 'test' %}Testing mode order placed. No payment was collected, but your order is now in the system and notifications should still work.{% else %}Thank you. Your payment was received. Save this page to check on your delivery.{% endif %}
     </div>
     {% endif %}
 

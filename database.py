@@ -917,8 +917,29 @@ def _ensure_business_exception_columns(conn):
 
 
 def ensure_business_exception_columns(conn):
-    """Public idempotent Guardian schema guard."""
+    """Public idempotent Guardian schema guard.
+
+    Guardian is a control-plane surface: a stale migration ledger must never
+    be allowed to turn the entire page into a 500.  The check therefore runs
+    against the live connection and commits the additive DDL before returning.
+    """
     _ensure_business_exception_columns(conn)
+    try:
+        conn.commit()
+    except Exception:
+        # Some connection wrappers commit DDL implicitly.
+        pass
+
+
+def guardian_schema_ready(conn) -> bool:
+    """Return True only when every column Guardian queries physically exists."""
+    required = ("assigned_to", "due_at", "escalated_at", "escalation_reason")
+    for name in required:
+        try:
+            conn.execute(f"SELECT {name} FROM business_exceptions LIMIT 0")
+        except (sqlite3.OperationalError, ValueError):
+            return False
+    return True
 
 
 def _apply_migrations(conn):
@@ -1025,6 +1046,13 @@ _turso_db_token = ""
 _db_initialized = False
 
 
+
+
+def reset_turso_connection():
+    """Drop the worker-local Turso connection so the next request gets a fresh
+    schema view. Used only by defensive control-plane recovery paths."""
+    global _turso_conn_cache
+    _turso_conn_cache = None
 
 
 def _close_turso():
