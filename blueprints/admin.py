@@ -9,7 +9,8 @@ from flask import (
     url_for, flash, jsonify, abort, current_app,
     send_file, Response,
 )
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
+import pyotp
 
 import config
 import database as db
@@ -22,6 +23,8 @@ from helpers import (
     generate_otp_code, store_otp, verify_otp_code,
     notify_admins_new_order, webpush_notify_admins_new_order,
     whatsapp_enabled, send_whatsapp, twilio_enabled, send_sms,
+    get_settings, customer_email_notifications_enabled,
+    invalidate_catalog_cache, invalidate_settings_cache,
     allowed_product_file, save_product_file, product_file_path,
     generate_download_tokens, migrate_legacy_product_files,
     customer_login_required,
@@ -34,6 +37,10 @@ from helpers import (
 
 import razorpay_client as rzp
 import invoicing
+from intelligence_service import (
+    assistant_answer, get_business_insights, detect_anomalies, inventory_forecast,
+)
+from permissions import PRESET_PERMISSIONS
 # New payment abstraction layer
 from payment.gateways import get_payment_gateway, PaymentResult
 from payment.refund import initiate_refund, process_refund
