@@ -189,7 +189,7 @@ def scan_exceptions(conn) -> int:
         ("negative_inventory", "critical",
          "Negative inventory detected",
          "One or more products have negative stock.",
-         "SELECT id, name, stock FROM products WHERE stock < 0"),
+         "SELECT id, name, quantity FROM products WHERE quantity < 0"),
         ("payment_without_paid_order", "high",
          "Payment state/order mismatch",
          "A payment record appears completed while its order is not paid.",
@@ -215,9 +215,12 @@ def scan_exceptions(conn) -> int:
             ).fetchone()
             if exists:
                 continue
+            metadata = dict(row)
+            if code == 'negative_inventory' and 'quantity' in metadata:
+                metadata['stock'] = metadata['quantity']
             add_exception(conn, code=code, severity=severity, title=title, description=description,
                           entity='product' if code == 'negative_inventory' else ('order' if code == 'payment_without_paid_order' else 'refund'),
-                          entity_id=entity_id, metadata=dict(row))
+                          entity_id=entity_id, metadata=metadata)
             created += 1
     return created
 

@@ -440,6 +440,16 @@ def create_app():
           return dict(cart_count=cart_count)
 
       @app.context_processor
+      def inject_site_settings():
+          """Make site settings available to every template, including admin pages."""
+          try:
+              from helpers import get_settings
+              return dict(settings=get_settings())
+          except Exception:
+              # Rendering must remain resilient during first-boot/migration windows.
+              return dict(settings={"site_name": "Virtual Store", "currency_symbol": "₹"})
+
+      @app.context_processor
       def inject_admin_permissions():
           """Expose the current admin permission check to Jinja templates."""
           perms = session.get("admin_permissions", []) or []

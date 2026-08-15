@@ -2,7 +2,7 @@
 const CACHE = 'admin-v3';
 const SHELL_URLS = [
   '/admin/',
-  '/admin/dashboard',
+  '/admin/',
   '/admin/orders',
   '/admin/products',
   '/admin/settings',
