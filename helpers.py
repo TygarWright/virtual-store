@@ -4,6 +4,7 @@ import json
 import time
 import hashlib
 import secrets
+from urllib.parse import urlsplit
 import smtplib
 import threading
 from datetime import datetime, timedelta, timezone
@@ -385,10 +386,25 @@ def has_permission(user_permissions, *required):
     return any(p in user_permissions for p in required)
 
 
+def is_safe_redirect_target(target: str) -> bool:
+    """Allow only local, same-site relative redirects."""
+    if not target:
+        return False
+    try:
+        parsed = urlsplit(target)
+    except ValueError:
+        return False
+    # Reject absolute URLs, protocol-relative URLs, backslashes, and control chars.
+    if parsed.scheme or parsed.netloc or target.startswith("\\") or "\\" in target:
+        return False
+    if any(ord(ch) < 32 for ch in target):
+        return False
+    return target.startswith("/") and not target.startswith("//")
+
+
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
-        print("DEBUG: session =", dict(session))  # DEBUG
         if not session.get("admin_id"):
             return redirect(url_for("admin.admin_login", next=request.path))
         return view(*args, **kwargs)

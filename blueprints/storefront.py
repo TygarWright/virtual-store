@@ -392,7 +392,7 @@ def api_wishlist_add():
         return jsonify({"success": True, "message": "Added to wishlist!"})
     except Exception as exc:
         conn.close()
-        app.logger.warning("Wishlist insert failed: %s", exc)
+        current_app.logger.warning("Wishlist insert failed: %s", exc)
         return jsonify({"error": "Could not add to wishlist. Please try again."}), 500
     finally:
         conn.close()
@@ -1930,7 +1930,7 @@ def auth_send_otp():
             return jsonify({"success": True, "message": "Code sent!"})
         except Exception as e:
             # Log but don't expose Twilio errors to the client
-            app.logger.error(f"Twilio SMS error: {e}")
+            current_app.logger.error("Twilio SMS error: %s", e)
             return jsonify({"error": "Failed to send SMS. Please try again."}), 500
 
     # Dev mode fallback — never expose codes in production without Twilio
@@ -2032,7 +2032,7 @@ def auth_phone_verify():
     data = request.get_json(force=True, silent=True) or {}
     id_token = data.get("id_token", "")
 
-    app.logger.info(
+    current_app.logger.info(
         "POST /auth/phone/verify: has_id_token=%s has_name=%s has_email=%s",
         bool(id_token),
         bool(data.get("name")),
@@ -3045,7 +3045,7 @@ def set_timezone():
 @storefront_bp.route("/googlead21c3b32e52177a.html")
 def google_verification():
     import os
-    return send_file(os.path.join(app.static_folder, "googlead21c3b32e52177a.html"))
+    return send_file(os.path.join(current_app.static_folder, "googlead21c3b32e52177a.html"))
 
 
 # Service worker for admin offline + push support — served from app root for scope
@@ -3061,7 +3061,8 @@ def service_worker_admin():
 
 if __name__ == "__main__":
     import os
+    from app import create_app
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=config.DEBUG)
+    create_app().run(host="0.0.0.0", port=port, debug=config.DEBUG)
 
 
