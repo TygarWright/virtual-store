@@ -56,6 +56,15 @@
 <!-- Reading progress bar -->
 <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
 <a class="skip-link" href="#main">Skip to content</a>
+{% if storefront_notices %}
+<div class="storefront-notices" role="region" aria-label="Store notices">
+  {% for notice in storefront_notices %}
+  <div class="storefront-notice storefront-notice--{{ notice.kind|default('info') }}">
+    <strong>{{ notice.title }}</strong><span>{{ notice.body }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
 {% if not customer_logged_in %}
   {% set greeting_line = "Welcome to Virtual Store" %}
   {% set greeting_sub = "Curated finds, considered craft" %}

@@ -31,7 +31,7 @@
         {% set reply_count = replies_map.get(ticket.id, [])|length %}
         <tr class="ticket-row" onclick="toggleTicketDetails({{ ticket.id }})">
           <td>{{ ticket.id }}</td>
-          <td>{{ ticket.title }}</td>
+          <td><strong>{{ ticket.title }}</strong><br><small class="text-muted">{% if ticket.scope_type == 'global' %}🌐 Global{% elif ticket.scope_type == 'role' %}👥 {{ ticket.target_role|replace('_', ' ')|title }}{% elif ticket.scope_type == 'employee' %}👤 {{ ticket.target_username or 'Employee' }}{% else %}🔒 Private{% endif %}</small></td>
           <td>
             <span class="ticket-category ticket-category--{{ ticket.category }}">
               {{ ticket.category|replace('_', ' ')|title }}

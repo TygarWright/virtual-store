@@ -4261,3 +4261,6 @@ animation: heartPop 0.5s cubic-bezier(0.34, 1.8, 0.64, 1);
 .pagination{display:flex;align-items:center;justify-content:center;gap:.75rem;flex-wrap:wrap;margin:2rem auto 0}
 .pagination__status{font-size:.82rem;color:var(--grey-500)}
 @media(max-width:560px){.pagination{justify-content:space-between}.pagination .btn{min-width:110px}.pagination__status{order:3;width:100%;text-align:center}}
+.storefront-notices{position:sticky;top:0;z-index:1000;display:flex;flex-direction:column}
+.storefront-notice{display:flex;gap:.75rem;align-items:center;justify-content:center;padding:.65rem 1rem;font-size:.9rem;border-bottom:1px solid rgba(0,0,0,.08)}
+.storefront-notice--info{background:#eef4ff}.storefront-notice--success{background:#eefaf1}.storefront-notice--warning{background:#fff7e7}.storefront-notice--critical{background:#fff0f0}

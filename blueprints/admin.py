@@ -41,6 +41,7 @@ from intelligence_service import (
     assistant_answer, get_business_insights, detect_anomalies, inventory_forecast,
 )
 from permissions import PRESET_PERMISSIONS
+from permissions_comm import get_or_create_global, get_or_create_direct, add_message, messages as team_messages, visible_conversations, mark_read, active_notices
 # New payment abstraction layer
 from payment.gateways import get_payment_gateway, PaymentResult
 from payment.refund import initiate_refund, process_refund
@@ -2160,21 +2161,27 @@ def admin_tickets():
     admin_perms = session.get("admin_permissions", [])
     is_master = "*" in admin_perms
 
+    current_role = session.get("admin_role", "custom")
     if is_master:
         tickets = conn.execute(
-            """SELECT t.*, au.username AS creator_name
+            """SELECT t.*, au.username AS creator_name, target.username AS target_username
                FROM admin_tickets t
                LEFT JOIN admin_users au ON t.admin_id = au.id
+               LEFT JOIN admin_users target ON t.target_admin_id = target.id
                ORDER BY t.created_at DESC"""
         ).fetchall()
     else:
         tickets = conn.execute(
-            """SELECT t.*, au.username AS creator_name
+            """SELECT t.*, au.username AS creator_name, target.username AS target_username
                FROM admin_tickets t
                LEFT JOIN admin_users au ON t.admin_id = au.id
-               WHERE t.admin_id = ?
+               LEFT JOIN admin_users target ON t.target_admin_id = target.id
+               WHERE t.scope_type='global'
+                  OR t.admin_id = ?
+                  OR t.target_admin_id = ?
+                  OR (t.scope_type='role' AND t.target_role = ?)
                ORDER BY t.created_at DESC""",
-            (admin_id,),
+            (admin_id, admin_id, current_role),
         ).fetchall()
 
     # Load replies for all tickets
@@ -2193,8 +2200,9 @@ def admin_tickets():
         for r in replies:
             replies_map.setdefault(r["ticket_id"], []).append(dict(r))
 
+    team_admins = conn.execute("SELECT id, username, role FROM admin_users WHERE is_active=1 ORDER BY username").fetchall()
     conn.close()
-    return render_template("admin/tickets.html", tickets=tickets, is_master=is_master, replies_map=replies_map)
+    return render_template("admin/tickets.html", tickets=tickets, is_master=is_master, replies_map=replies_map, team_admins=team_admins)
 
 
 
@@ -2203,17 +2211,23 @@ def admin_tickets():
 @login_required
 @requires_permission("tickets.create")
 def admin_tickets_new():
-    """Create a new ticket (sub-admins only — master cannot create tickets)."""
+    """Create a global, role-focused or employee-focused internal ticket."""
     check_csrf()
-    admin_perms = session.get("admin_permissions", [])
-    if "*" in admin_perms:
-        flash("Master admins cannot create tickets.", "error")
-        return redirect(url_for("admin.admin_tickets"))
-
     admin_id = session.get("admin_id")
     category = (request.form.get("category") or "other").strip()
     title = (request.form.get("title") or "").strip()
     description = (request.form.get("description") or "").strip()
+    scope_type = (request.form.get("scope_type") or "private").strip()
+    target_role = (request.form.get("target_role") or "").strip()
+    try:
+        target_admin_id = int(request.form.get("target_admin_id")) if request.form.get("target_admin_id") else None
+    except ValueError:
+        target_admin_id = None
+    if scope_type not in {"private", "global", "role", "employee"}: scope_type = "private"
+    if scope_type == "employee" and not target_admin_id:
+        flash("Choose an employee for an employee-focused ticket.", "error"); return redirect(url_for("admin.admin_tickets"))
+    if scope_type == "role" and not target_role:
+        flash("Choose a staff role for a staff-focused ticket.", "error"); return redirect(url_for("admin.admin_tickets"))
 
     valid_categories = {"feature_request", "bug_report", "content_update", "permission_request", "general", "other"}
     if category not in valid_categories:
@@ -2225,8 +2239,8 @@ def admin_tickets_new():
 
     conn = db.get_db()
     conn.execute(
-        "INSERT INTO admin_tickets (admin_id, category, title, description, status, created_at) VALUES (?, ?, ?, ?, 'open', ?)",
-        (admin_id, category, title, description, db.now()),
+        "INSERT INTO admin_tickets (admin_id, category, title, description, status, created_at, scope_type, target_role, target_admin_id) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?)",
+        (admin_id, category, title, description, db.now(), scope_type, target_role, target_admin_id),
     )
     conn.commit()
     conn.close()
@@ -2325,6 +2339,80 @@ def admin_tickets_reply(ticket_id):
     flash("Reply added.", "success")
     return redirect(url_for("admin.admin_tickets"))
 
+
+
+# ============================================================= ADMIN: TEAM HUB / NOTICES
+
+@admin_bp.route("/team-hub", methods=["GET", "POST"])
+@login_required
+@requires_permission("team.chat")
+def admin_team_hub():
+    admin_id = int(session["admin_id"])
+    conn = db.get_db()
+    if request.method == "POST":
+        check_csrf()
+        kind = (request.form.get("kind") or "global").strip()
+        body = (request.form.get("body") or "").strip()
+        selected_conversation = request.form.get("conversation_id", type=int)
+        try:
+            if selected_conversation:
+                cid = selected_conversation
+                if not team_messages(conn, cid, admin_id) and not conn.execute("SELECT id FROM team_conversations WHERE id=?", (cid,)).fetchone():
+                    raise ValueError("Conversation not found.")
+                add_message(conn, cid, admin_id, body)
+            elif kind == "global":
+                cid = get_or_create_global(conn, admin_id); add_message(conn, cid, admin_id, body)
+            elif kind == "direct":
+                target = int(request.form.get("target_admin_id"))
+                if target == admin_id: raise ValueError("You cannot start a direct chat with yourself.")
+                cid = get_or_create_direct(conn, admin_id, target); add_message(conn, cid, admin_id, body)
+            else:
+                flash("Unsupported conversation type.", "error")
+                conn.close(); return redirect(url_for("admin.admin_team_hub"))
+            flash("Message sent to the team.", "success")
+        except Exception as exc:
+            conn.rollback(); flash(str(exc), "error")
+        conn.close(); return redirect(url_for("admin.admin_team_hub", conversation=cid if 'cid' in locals() else None))
+    conversations = visible_conversations(conn, admin_id)
+    if not conversations:
+        get_or_create_global(conn, admin_id); conversations = visible_conversations(conn, admin_id)
+    selected_id = request.args.get("conversation", type=int) or int(conversations[0]["id"])
+    selected = next((c for c in conversations if int(c["id"]) == selected_id), conversations[0])
+    msgs = team_messages(conn, int(selected["id"]), admin_id)
+    if msgs: mark_read(conn, int(selected["id"]), admin_id, int(msgs[-1]["id"]))
+    admins = conn.execute("SELECT id, username, role FROM admin_users WHERE is_active=1 AND id<>? ORDER BY username", (admin_id,)).fetchall()
+    conn.close()
+    return render_template("admin/team_hub.html", conversations=conversations, selected=selected, messages=msgs, admins=admins)
+
+@admin_bp.route("/team-hub/poll/<int:conversation_id>")
+@login_required
+@requires_permission("team.chat")
+def admin_team_hub_poll(conversation_id):
+    conn = db.get_db(); msgs = team_messages(conn, conversation_id, int(session["admin_id"])); conn.close()
+    return jsonify([dict(m) for m in msgs[-100:]])
+
+@admin_bp.route("/notices", methods=["GET", "POST"])
+@login_required
+@requires_permission("content.manage")
+def admin_notices():
+    conn = db.get_db()
+    if request.method == "POST":
+        check_csrf()
+        action = request.form.get("action", "create")
+        if action == "toggle":
+            nid = int(request.form.get("id")); conn.execute("UPDATE site_notices SET enabled=1-enabled, updated_at=? WHERE id=?", (db.now(), nid)); conn.commit(); flash("Notice visibility updated.", "success")
+        elif action == "delete":
+            nid = int(request.form.get("id")); conn.execute("DELETE FROM site_notices WHERE id=?", (nid,)); conn.commit(); flash("Notice removed.", "success")
+        else:
+            title=(request.form.get("title") or "").strip(); body=(request.form.get("body") or "").strip(); kind=(request.form.get("kind") or "info").strip()
+            try: priority=int(request.form.get("priority",0))
+            except ValueError: priority=0
+            if not title or not body: flash("Title and message are required.", "error")
+            else:
+                conn.execute("INSERT INTO site_notices (title,body,kind,enabled,priority,starts_at,ends_at,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (title,body,kind,1,priority,request.form.get("starts_at") or None,request.form.get("ends_at") or None,int(session["admin_id"]),db.now(),db.now())); conn.commit(); flash("Notice published to the storefront.", "success")
+        conn.close(); return redirect(url_for("admin.admin_notices"))
+    notices=conn.execute("SELECT n.*, a.username AS creator_name FROM site_notices n LEFT JOIN admin_users a ON a.id=n.created_by ORDER BY n.priority DESC,n.created_at DESC").fetchall(); conn.close()
+    return render_template("admin/notices.html", notices=notices)
 
 # ============================================================= ADMIN: TEAM MANAGEMENT (master only)
 

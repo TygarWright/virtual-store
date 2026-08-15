@@ -450,6 +450,29 @@ def create_app():
               return dict(settings={"site_name": "Virtual Store", "currency_symbol": "₹"})
 
       @app.context_processor
+      def inject_admin_navigation_and_notices():
+          def admin_nav_active(section):
+              ep = request.endpoint or ""
+              groups = {
+                  "dashboard": {"admin_dashboard"}, "orders": {"admin_orders", "admin_order_detail"},
+                  "intelligence": {"admin_insights"}, "customers": {"admin_customers", "admin_customer_timeline"},
+                  "products": {"admin_products", "admin_product_form"}, "homepage": {"admin_sections"},
+                  "coupons": {"admin_coupons", "admin_coupon_history"}, "content": {"admin_testimonials", "admin_faqs"},
+                  "newsletter": {"admin_newsletter"}, "settings": {"admin_settings"}, "audit": {"admin_audit_log"},
+                  "inventory": {"admin_stock_requests"}, "tickets": {"admin_tickets", "admin_tickets_new", "admin_tickets_status", "admin_tickets_reply"},
+                  "team": {"admin_team"}, "team_hub": {"admin_team_hub", "admin_team_hub_poll"}, "notices": {"admin_notices"},
+                  "guardian": {"admin_guardian", "admin_guardian_scan", "admin_guardian_resolve"},
+                  "simulation": {"admin_simulation_lab"}, "training": {"admin_training"}, "account": {"admin_account"},
+              }
+              return ep in groups.get(section, set())
+          try:
+              from permissions_comm import active_notices
+              conn = db.get_db(); notices = [dict(n) for n in active_notices(conn)]; conn.close()
+          except Exception:
+              notices=[]
+          return dict(admin_nav_active=admin_nav_active, storefront_notices=notices)
+
+      @app.context_processor
       def inject_admin_permissions():
           """Expose the current admin permission check to Jinja templates."""
           perms = session.get("admin_permissions", []) or []

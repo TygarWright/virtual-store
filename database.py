@@ -350,6 +350,19 @@ MIGRATIONS = [
     "ALTER TABLE admin_ticket_replies ADD COLUMN attachment_name TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE admin_ticket_replies ADD COLUMN attachment_path TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE orders ADD COLUMN inventory_reservation_id TEXT",
+    "ALTER TABLE business_exceptions ADD COLUMN due_at TEXT",
+    "ALTER TABLE business_exceptions ADD COLUMN escalated_at TEXT",
+    "ALTER TABLE business_exceptions ADD COLUMN escalation_reason TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE admin_tickets ADD COLUMN scope_type TEXT NOT NULL DEFAULT 'private'",
+    "ALTER TABLE admin_tickets ADD COLUMN target_role TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE admin_tickets ADD COLUMN target_admin_id INTEGER",
+    "CREATE TABLE IF NOT EXISTS site_notices (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, body TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'info', enabled INTEGER NOT NULL DEFAULT 1, priority INTEGER NOT NULL DEFAULT 0, starts_at TEXT, ends_at TEXT, created_by INTEGER REFERENCES admin_users(id), created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS idx_site_notices_enabled ON site_notices(enabled, priority, created_at)",
+    "CREATE TABLE IF NOT EXISTS team_conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', target_role TEXT NOT NULL DEFAULT '', target_admin_id INTEGER REFERENCES admin_users(id), created_by INTEGER NOT NULL REFERENCES admin_users(id), created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS idx_team_conversations_updated ON team_conversations(updated_at)",
+    "CREATE TABLE IF NOT EXISTS team_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL REFERENCES team_conversations(id) ON DELETE CASCADE, sender_admin_id INTEGER NOT NULL REFERENCES admin_users(id), body TEXT NOT NULL, created_at TEXT NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS idx_team_messages_conversation ON team_messages(conversation_id, id)",
+    "CREATE TABLE IF NOT EXISTS team_reads (conversation_id INTEGER NOT NULL REFERENCES team_conversations(id) ON DELETE CASCADE, admin_id INTEGER NOT NULL REFERENCES admin_users(id), last_message_id INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(conversation_id, admin_id))",
 ]
 
 SCHEMA_EXTRA = """
