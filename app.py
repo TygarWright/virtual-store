@@ -15,6 +15,7 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_wtf.csrf import generate_csrf
 from functools import wraps
 
 import config
@@ -247,7 +248,11 @@ def create_app():
       # 3. Request ID Middleware
       @app.before_request
       def before_request():
-          """Generate or retrieve a request ID for correlation."""
+          """Prepare the database and generate a request ID for correlation."""
+          # Initialize the schema on the first real request. The previous
+          # deployment only initialized it when /healthz was hit, which made
+          # a fresh deployment render fallback settings and an empty catalog.
+          db.init_db_if_needed()
           request_id = request.headers.get('X-Request-ID', str(uuid.uuid4()))
           g.request_id = request_id
           # Also set it in the Sentry scope for error events
@@ -420,8 +425,12 @@ def create_app():
 
       @app.context_processor
       def inject_csrf_token():
-          """Provide a CSRF token function to Jinja templates."""
-          return dict(csrf_token=lambda: get_csrf_token())
+          """Expose Flask-WTF's signed CSRF token to templates.
+
+          Never replace Flask-WTF's csrf_token() with the raw session token:
+          doing so produces tokens that Flask-WTF rejects as invalid.
+          """
+          return dict(csrf_token=generate_csrf)
 
       @app.context_processor
       def inject_cart_count():

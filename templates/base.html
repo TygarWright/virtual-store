@@ -340,7 +340,7 @@ window.GOOGLE_CLIENT_ID = {{ google_client_id|tojson }};
   function sendMetrics(metrics) {
     fetch('/api/performance', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': (window.getCsrfToken ? window.getCsrfToken() : document.querySelector('meta[name=\"csrf-token\"]')?.content || '')},
       body: JSON.stringify({metrics})
     }).catch(function(){});
   }

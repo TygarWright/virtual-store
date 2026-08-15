@@ -19,6 +19,8 @@
       var xhr = new XMLHttpRequest();
       xhr.open('POST', '/set-timezone', true);
       xhr.setRequestHeader('Content-Type', 'application/json');
+      var csrf = window.getCsrfToken ? window.getCsrfToken() : '';
+      if (csrf) xhr.setRequestHeader('X-CSRFToken', csrf);
       xhr.send(JSON.stringify({ offset: offsetSeconds }));
       localStorage.setItem('vs_timezone_offset', String(offsetSeconds));
     } catch (e) {

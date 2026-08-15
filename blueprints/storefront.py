@@ -2689,7 +2689,7 @@ def robots():
 def favicon():
     # Only favicon.svg exists in the repo — serve it for .ico requests too
     # so older browsers/crawlers get a real icon instead of an empty 204.
-    return app.send_static_file("favicon.svg")
+    return current_app.send_static_file("favicon.svg")
 
 
 

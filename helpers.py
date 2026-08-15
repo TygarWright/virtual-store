@@ -12,6 +12,7 @@ from functools import wraps
 
 import requests
 from flask import session, redirect, url_for, request, abort, jsonify, g, flash, current_app
+from flask_wtf.csrf import validate_csrf
 from werkzeug.utils import secure_filename
 from PIL import Image, UnidentifiedImageError
 
@@ -663,17 +664,20 @@ def prewarm_firebase_certs():
 # headers, which is exactly why this split exists).
 
 def get_csrf_token():
-    if "csrf_token" not in session:
-        session["csrf_token"] = secrets.token_hex(16)
-    return session["csrf_token"]
+    """Compatibility wrapper returning Flask-WTF's signed CSRF token."""
+    from flask_wtf.csrf import generate_csrf
+    return generate_csrf()
 
 
 def check_csrf():
     if not config.CSRF_ENABLED:
         return
     token = request.form.get("csrf_token", "")
-    expected = session.get("csrf_token", "")
-    if not token or not expected or not secrets.compare_digest(token, expected):
+    if not token:
+        abort(400, description="Your session expired — please refresh and try again.")
+    try:
+        validate_csrf(token)
+    except Exception:
         abort(400, description="Your session expired — please refresh and try again.")
 
 
@@ -683,14 +687,19 @@ def check_csrf_api():
     (token travels as a normal form field there, same as check_csrf())."""
     if not config.CSRF_ENABLED:
         return
-    token = request.headers.get("X-CSRF-Token", "")
+    token = request.headers.get("X-CSRFToken", "") or request.headers.get("X-CSRF-Token", "")
     if not token:
         data = request.get_json(silent=True) or {}
         token = data.get("csrf_token", "")
     if not token:
         token = request.form.get("csrf_token", "")
-    expected = session.get("csrf_token", "")
-    if not token or not expected or not secrets.compare_digest(token, expected):
+    if not token:
+        response = jsonify({"error": "Your session expired — please refresh the page and try again."})
+        response.status_code = 400
+        abort(response)
+    try:
+        validate_csrf(token)
+    except Exception:
         response = jsonify({"error": "Your session expired — please refresh the page and try again."})
         response.status_code = 400
         abort(response)
