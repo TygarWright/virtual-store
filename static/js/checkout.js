@@ -72,6 +72,10 @@ function resetPriceDisplay() {
 }
 
 async function startCheckout(productId, productName) {
+  if (window.storeSettings && window.storeSettings.disable_payments === "true") {
+    showBuyError("Checkout is temporarily disabled.");
+    return;
+  }
   const name = document.getElementById("buyerName").value.trim();
   const email = document.getElementById("buyerEmail").value.trim();
   const phone = document.getElementById("buyerPhone").value.trim();
@@ -98,6 +102,11 @@ async function startCheckout(productId, productName) {
     if (!res.ok) {
       showBuyError(data.error || "Something went wrong. Please try again.");
       resetBtn(btn, productName);
+      return;
+    }
+
+    if (data.test_mode) {
+      window.location.href = data.redirect_url || ("/track?order_ref=" + encodeURIComponent(data.order_ref) + "&email=" + encodeURIComponent(email));
       return;
     }
 

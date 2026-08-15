@@ -5,4 +5,23 @@ Pillow==12.1.1
 gunicorn==23.0.0
 # Verifies Firebase phone-auth ID tokens server-side (no firebase-admin /
 # service-account needed). Only used if FIREBASE_* env vars are set.
-google-auth==2.38.0
+google-auth>=2.38.0
+# Sends push notifications to the Android admin app via Firebase Cloud
+# Messaging. Only used if FIREBASE_SERVICE_ACCOUNT_JSON / _FILE is set.
+firebase-admin>=6.6.0
+twilio==9.3.6
+pyotp==2.9.0
+libsql==0.1.11
+fpdf2==2.8.2
+flask-compress==1.15
+Flask-Talisman==1.1.0
+Flask-WTF==1.2.1
+Flask-Limiter==3.5.0
+Flask-Migrate==4.0.5
+Flask-SQLAlchemy==3.1.1
+python-json-logger==2.0.7
+sentry-sdk==2.10.0
+redis==5.0.5
+rq==1.16.0
+prometheus_client==0.20.0
+prometheus-flask-exporter==0.22.2

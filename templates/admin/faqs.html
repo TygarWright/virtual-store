@@ -6,7 +6,7 @@
 
 {% for f in faqs %}
 <div class="card-box">
-  <form method="POST" action="{{ url_for('admin_faqs_save') }}">
+  <form method="POST" action="{{ url_for('admin.admin_faqs_save') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="id" value="{{ f.id }}">
     <div class="field">
@@ -23,7 +23,7 @@
     </div>
     <button class="btn btn--outline btn--sm" type="submit">Save</button>
   </form>
-  <form method="POST" action="{{ url_for('admin_faqs_delete', faq_id=f.id) }}"
+  <form method="POST" action="{{ url_for('admin.admin_faqs_delete', faq_id=f.id) }}"
         onsubmit="return confirm('Delete this question?');" style="margin-top:0.5rem;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn btn--danger btn--sm" type="submit">Delete</button>
@@ -33,7 +33,7 @@
 
 <div class="card-box">
   <h3>Add New Question</h3>
-  <form method="POST" action="{{ url_for('admin_faqs_save') }}">
+  <form method="POST" action="{{ url_for('admin.admin_faqs_save') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="field">
       <label>Question</label>

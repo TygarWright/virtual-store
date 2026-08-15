@@ -53,6 +53,33 @@
   </div>
 
   <div class="card-box">
+    <h3>Checkout & testing</h3>
+    <p class="help-text" style="margin-top:0; margin-bottom:1.25rem;">There are two safe ways to test checkout. <strong>Store Test Mode</strong> simulates payment inside Virtual Store and never talks to Razorpay. <strong>Razorpay Sandbox</strong> uses Razorpay's own Test API keys and mock payment flow.</p>
+    <div class="field">
+      <label class="toggle-label">
+        <span>Store Test Mode (no real payment)</span>
+        {% if allow_store_test_mode %}<input type="checkbox" name="test_checkout_mode" {{ 'checked' if settings.test_checkout_mode == 'true' }}>{% else %}<input type="checkbox" disabled{% endif %}
+      </label>
+      <small>When enabled, orders use a simulated successful payment. No Razorpay request is made. {% if allow_store_test_mode %}Test-mode customer emails are off by default so you do not accidentally email real customers.{% else %}<strong>Locked by deployment.</strong> Enable <code>ALLOW_STORE_TEST_MODE=true</code> only on a test/staging environment.{% endif %}</small>
+    </div>
+    <div class="field">
+      <label>Razorpay environment</label>
+      <input type="text" value="{{ razorpay_environment }}" readonly>
+      <small>For real payment testing, use Razorpay's separate Test Mode API keys (they start with <code>rzp_test_</code>). Leave Store Test Mode OFF when testing Razorpay itself.</small>
+    </div>
+  </div>
+
+  <div class="card-box">
+    <h3>Checkout</h3>
+    <div class="field">
+      <label class="toggle-label">
+        <span>Disable Payments (show "Checkout temporarily disabled")</span>
+        <input type="checkbox" name="disable_payments" value="true" {{ "checked" if settings.disable_payments == "true" else "" }}>
+      </label>
+      <small>Use this when the store is not ready to accept orders yet.</small>
+    </div>
+  </div>
+  <div class="card-box">
     <h3>Automations</h3>
     <p class="help-text" style="margin-top:0; margin-bottom:1.25rem;">Let the system handle things for you. Turn these on and forget about them.</p>
     <div class="field">
@@ -76,6 +103,23 @@
       </label>
       <small>Get a visual alert on the dashboard when a product is running low.</small>
     </div>
+    <div class="field">
+      <label class="toggle-label">
+        <span>Auto-fetch holidays <span style="font-weight:400;opacity:0.6;">(Calendarific)</span></span>
+        <input type="checkbox" name="calendarific_enabled" {{ 'checked' if settings.calendarific_enabled != 'false' }}>
+      </label>
+      <small>
+        {% if cal_api_key_set %}
+          {% if cal_holiday_count > 0 %}
+            ✅ {{ cal_holiday_count }} holidays cached for {{ cal_last_fetch_year or '' }}.
+          {% else %}
+            ⏳ Calendarific API key is set. Save settings to fetch holidays.
+          {% endif %}
+        {% else %}
+          Set <code>CALENDARIFIC_API_KEY</code> env var to auto-fetch real holidays. Get a free key at <a href="https://calendarific.com/" target="_blank">calendarific.com</a>.
+        {% endif %}
+      </small>
+    </div>
   </div>
 
   <div class="card-box">
@@ -98,6 +142,79 @@
     </div>
   </div>
 
+  <div class="card-box">
+    <h3>Seasonal Greetings</h3>
+    <p class="help-text">Add date-based greetings. Use <code>{name}</code> for customer name and <code>{label}</code> for the festival/occasion name. Leave blank to use the built-in defaults.</p>
+    <div id="greetingRows">
+      {% for g in seasonal_greetings %}
+      <div class="greeting-row" style="display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem; flex-wrap:wrap;">
+        <input type="text" name="greeting_date[]" value="{{ g.date }}" placeholder="MMDD" style="width:65px; text-align:center;" maxlength="4" inputmode="numeric">
+        <span style="opacity:0.4;">→</span>
+        <input type="text" name="greeting_label[]" value="{{ g.label }}" placeholder="Label (e.g. Diwali)" style="flex:1; min-width:100px;">
+        <input type="text" name="greeting_msg[]" value="{{ g.msg or '' }}" placeholder='Message (e.g. "Happy {label}, {name}! 🎉")' style="flex:2; min-width:160px;">
+        <button type="button" class="btn btn--sm btn--outline" onclick="this.parentElement.remove()" style="background:none;border:1px solid var(--grey-300);border-radius:6px;cursor:pointer;">✕</button>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="button" class="btn btn--sm btn--outline" onclick="addGreetingRow()" style="margin-top:0.5rem;">+ Add Date</button>
+    <details style="margin-top:0.7rem; opacity:0.7; font-size:0.8rem;">
+      <summary style="cursor:pointer;">Template ideas</summary>
+    <div style="margin-top:0.4rem; line-height:1.6;">
+        <code>Happy {label}, {name}! 🎉</code> — festival<br>
+        <code>Welcome, {name}! Enjoy your {label}</code> — first visit<br>
+        <code>🎂 Happy Birthday, {name}!</code> — birthday<br>
+        <code>{name}, you've been with us for {label} years! ❤️</code> — anniversary<br>
+      </div>
+    </details>
+  </div>
+
+  <div class="card-box">
+    <h3>Legal Pages</h3>
+    <p class="help-text" style="margin-top:0; margin-bottom:1.25rem;">Edit the content of your legal pages below. Each textarea accepts HTML. The "Last updated" date appears at the bottom of every policy page.</p>
+
+    <details style="margin-bottom:1rem; border:1px solid var(--grey-200); border-radius:8px; padding:0.75rem;">
+      <summary style="cursor:pointer; font-weight:600; margin-bottom:0.5rem;">📄 Refund Policy</summary>
+      <div class="field" style="margin-top:0.5rem;">
+        <textarea name="refund_policy_text" style="min-height:300px; font-family:monospace; font-size:0.85rem;">{{ settings.refund_policy_text }}</textarea>
+      </div>
+    </details>
+
+    <details style="margin-bottom:1rem; border:1px solid var(--grey-200); border-radius:8px; padding:0.75rem;">
+      <summary style="cursor:pointer; font-weight:600; margin-bottom:0.5rem;">🔒 Privacy Policy</summary>
+      <div class="field" style="margin-top:0.5rem;">
+        <textarea name="privacy_policy_text" style="min-height:300px; font-family:monospace; font-size:0.85rem;">{{ settings.privacy_policy_text }}</textarea>
+      </div>
+    </details>
+
+    <details style="margin-bottom:1rem; border:1px solid var(--grey-200); border-radius:8px; padding:0.75rem;">
+      <summary style="cursor:pointer; font-weight:600; margin-bottom:0.5rem;">⚖️ Terms of Service</summary>
+      <div class="field" style="margin-top:0.5rem;">
+        <textarea name="terms_of_service_text" style="min-height:300px; font-family:monospace; font-size:0.85rem;">{{ settings.terms_of_service_text }}</textarea>
+      </div>
+    </details>
+
+    <div class="field">
+      <label>Last Policy Update</label>
+      <input type="text" name="last_policy_update" value="{{ settings.last_policy_update|default('July 2026') }}" style="max-width:200px;">
+      <small>Shown as "Last updated:" on all policy pages.</small>
+    </div>
+  </div>
+
   <button class="btn" type="submit">Save Changes</button>
 </form>
+
+<script nonce="{{ csp_nonce }}">
+function addGreetingRow() {
+  var d = document.getElementById('greetingRows');
+  var r = document.createElement('div');
+  r.className = 'greeting-row';
+  r.style.cssText = 'display:flex; gap:0.5rem; align-items:center; margin-bottom:0.5rem; flex-wrap:wrap;';
+  r.innerHTML = '<input type="text" name="greeting_date[]" placeholder="MMDD" style="width:65px;text-align:center;" maxlength="4" inputmode="numeric">' +
+    '<span style="opacity:0.4;">→</span>' +
+    '<input type="text" name="greeting_label[]" placeholder="Label (e.g. Diwali)" style="flex:1; min-width:100px;">' +
+    '<input type="text" name="greeting_msg[]" placeholder=\'Message (e.g. "Happy {label}, {name}! 🎉")\' style="flex:2; min-width:160px;">' +
+    '<button type="button" onclick="this.parentElement.remove()" style="background:none;border:1px solid var(--grey-300);border-radius:6px;cursor:pointer;padding:2px 8px;">✕</button>';
+  d.appendChild(r);
+}
+</script>
 {% endblock %}

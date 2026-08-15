@@ -6,7 +6,7 @@
 
 {% for t in testimonials %}
 <div class="card-box">
-  <form method="POST" action="{{ url_for('admin_testimonials_save') }}">
+  <form method="POST" action="{{ url_for('admin.admin_testimonials_save') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="id" value="{{ t.id }}">
     <div class="field">
@@ -33,7 +33,7 @@
       <button class="btn btn--outline btn--sm" type="submit">Save</button>
     </div>
   </form>
-  <form method="POST" action="{{ url_for('admin_testimonials_delete', testimonial_id=t.id) }}"
+  <form method="POST" action="{{ url_for('admin.admin_testimonials_delete', testimonial_id=t.id) }}"
         onsubmit="return confirm('Delete this testimonial?');" style="margin-top:0.5rem;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn btn--danger btn--sm" type="submit">Delete</button>
@@ -43,7 +43,7 @@
 
 <div class="card-box">
   <h3>Add New Testimonial</h3>
-  <form method="POST" action="{{ url_for('admin_testimonials_save') }}">
+  <form method="POST" action="{{ url_for('admin.admin_testimonials_save') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="field">
       <label>Customer Name</label>

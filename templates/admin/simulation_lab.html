@@ -1,0 +1,8 @@
+{% extends "admin/base.html" %}
+{% block title %}Simulation Lab{% endblock %}
+{% block content %}
+<div class="admin-topbar"><div><h1>Simulation Lab</h1><p style="color:var(--muted,#888);margin:.25rem 0 0;">Stress-test business decisions without touching real money, orders or inventory.</p></div></div>
+<section class="card-box"><form method="POST" style="display:grid;gap:1rem;max-width:560px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Scenario<select name="scenario" class="admin-select">{% for s in scenarios %}<option value="{{ s }}">{{ s|replace('_',' ')|title }}</option>{% endfor %}</select></label><label>Scale<input class="admin-input" type="number" name="scale" min="1" max="1000000" value="100"></label><button class="admin-btn admin-btn--primary" type="submit">Run simulation</button></form>
+{% if result %}<div class="flash flash--success" style="margin-top:1rem"><strong>{{ result.scenario|replace('_',' ')|title }}</strong>: {{ result.failed_orders }} failed, {{ result.refunds }} refunds, net ₹{{ '{:,}'.format(result.net_amount) }}. Risk: {{ result.risk }}.</div>{% endif %}</section>
+<section class="card-box"><h3>Recent simulations</h3><div class="table-wrap"><table class="admin-table"><thead><tr><th>When</th><th>Scenario</th><th>Status</th><th>Result</th></tr></thead><tbody>{% for r in runs %}<tr><td>{{ r.created_at }}</td><td>{{ r.label }}</td><td>{{ r.status }}</td><td><code>{{ r.results_json }}</code></td></tr>{% else %}<tr><td colspan="4">No simulations yet.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

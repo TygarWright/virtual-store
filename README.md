@@ -1,10 +1,10 @@
-# Your Store — Virtual Products Website
+# Virtual Store — Production Digital Commerce Platform
 
 A lean, premium, black-and-white storefront for selling virtual/digital products in India,
 with Razorpay checkout and a simple admin panel built for a non-technical owner.
 
-**Tech stack (deliberately minimal):** Flask (Python) + SQLite (a single file, no database
-server to manage) + vanilla HTML/CSS/JS. No build step, no frontend framework, no ORM.
+**Tech stack:** Flask (Python) + SQLite/libSQL-compatible persistence + SQLAlchemy/Flask-Migrate
+for durable model/migration boundaries + vanilla HTML/CSS/JS. No frontend build step is required.
 
 ---
 
@@ -48,8 +48,9 @@ python app.py
 Then open **http://localhost:5000** in your browser. The admin panel is at
 **http://localhost:5000/admin/login**.
 
-The first time it runs, the site creates its own database file at `instance/store.db`
-and a default admin login using whatever `ADMIN_USERNAME` / `ADMIN_PASSWORD` you put in `.env`.
+The first time it runs, the site creates its own database file at `instance/store.db`.
+A production deployment must provide an explicit `ADMIN_USERNAME` and `ADMIN_PASSWORD`; the
+application refuses unsafe missing/placeholder secrets rather than silently generating credentials.
 **Log in and change the password immediately** (My Account → Change Password).
 
 ---

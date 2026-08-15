@@ -76,6 +76,11 @@ function resetCartPriceDisplay() {
 }
 
 async function startCartCheckout() {
+  if (window.storeSettings && window.storeSettings.disable_payments === "true") {
+    const errEl = document.getElementById("cartCheckoutError");
+    if (errEl) { errEl.textContent = "Checkout is temporarily disabled."; errEl.style.display = "block"; }
+    return;
+  }
   const name = document.getElementById("cartBuyerName").value.trim();
   const email = document.getElementById("cartBuyerEmail").value.trim();
   const phone = document.getElementById("cartBuyerPhone").value.trim();
@@ -102,6 +107,11 @@ async function startCartCheckout() {
     if (!res.ok) {
       showCartError(data.error || "Something went wrong. Please try again.");
       resetCartBtn(btn);
+      return;
+    }
+
+    if (data.test_mode) {
+      window.location.href = data.redirect_url || ("/track?order_ref=" + encodeURIComponent(data.order_ref) + "&email=" + encodeURIComponent(email));
       return;
     }
 

@@ -1,0 +1,73 @@
+{% extends "admin/base.html" %}
+{% block title %}Intelligence{% endblock %}
+{% block content %}
+<div class="admin-topbar">
+  <div><h1>Store Intelligence</h1><p style="margin:.25rem 0 0;color:var(--muted,#888);">Read-only insights built from verified store activity.</p></div>
+  <form method="GET" style="display:flex;gap:.5rem;align-items:center;">
+    <label for="days" class="sr-only">Period</label>
+    <select id="days" name="days" onchange="this.form.submit()" class="admin-select">
+      {% for n in [7,14,30,60,90,365] %}<option value="{{ n }}" {% if days == n %}selected{% endif %}>{{ n }} days</option>{% endfor %}
+    </select>
+  </form>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card stat-card--hero"><div class="num">{{ settings.currency_symbol }}{{ "{:,}".format(insights.revenue) }}</div><div class="label">Revenue</div></div>
+  <div class="stat-card"><div class="num">{{ insights.orders }}</div><div class="label">Completed Orders</div></div>
+  <div class="stat-card"><div class="num">{{ settings.currency_symbol }}{{ "{:,}".format(insights.avg_order|round(0)|int) }}</div><div class="label">Average Order</div></div>
+  <div class="stat-card"><div class="num">{{ "%.1f"|format(insights.failure_rate * 100) }}%</div><div class="label">Failure Rate</div></div>
+</div>
+
+<div class="dash-grid">
+  <section class="card-box">
+    <h3>Ask the store</h3>
+    <p style="color:var(--muted,#888);font-size:.85rem;">Ask about sales, top products, stock risk or anomalies. This assistant is read-only.</p>
+    <form id="intelAsk" style="display:flex;gap:.5rem;">
+      <input name="question" id="intelQuestion" class="admin-input" maxlength="500" placeholder="e.g. What are my best-selling products?" required style="flex:1;">
+      <button class="admin-btn admin-btn--primary" type="submit">Ask</button>
+    </form>
+    <div id="intelAnswer" class="card-box" style="margin-top:1rem;display:none;"></div>
+  </section>
+
+  <section class="card-box">
+    <h3>Detected anomalies</h3>
+    {% if anomalies %}
+      {% for a in anomalies %}<div class="flash flash--warning" style="margin:.5rem 0;">{{ a.message }}</div>{% endfor %}
+    {% else %}<p style="color:var(--muted,#888);">No significant anomalies detected.</p>{% endif %}
+  </section>
+</div>
+
+<section class="card-box" style="margin-top:1rem;">
+  <h3>Top products</h3>
+  {% if insights.top_products %}
+  <div class="table-wrap"><table class="admin-table"><thead><tr><th>Product</th><th>Units</th><th>Revenue</th></tr></thead><tbody>
+  {% for p in insights.top_products %}<tr><td>{{ p.product_name }}</td><td>{{ p.units }}</td><td>{{ settings.currency_symbol }}{{ "{:,}".format(p.revenue|int) }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p style="color:var(--muted,#888);">No completed sales in this period.</p>{% endif %}
+</section>
+
+<section class="card-box" style="margin-top:1rem;">
+  <h3>Inventory forecast — next 14 days</h3>
+  {% if at_risk %}
+  <div class="table-wrap"><table class="admin-table"><thead><tr><th>Product</th><th>Stock</th><th>Recent sales/day</th><th>Estimated days left</th><th>Risk</th></tr></thead><tbody>
+  {% for p in at_risk %}<tr><td>{{ p.name }}</td><td>{{ p.quantity if p.quantity is not none else '∞' }}</td><td>{{ p.daily_velocity }}</td><td>{{ p.estimated_days_left if p.estimated_days_left is not none else '—' }}</td><td><span class="badge badge--{{ 'cancelled' if p.risk in ['critical','out_of_stock'] else 'pending' }}">{{ p.risk|replace('_',' ') }}</span></td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p style="color:var(--muted,#888);">No inventory risks detected.</p>{% endif %}
+</section>
+
+<script nonce="{{ csp_nonce }}">
+(function(){
+  var form=document.getElementById('intelAsk'), q=document.getElementById('intelQuestion'), out=document.getElementById('intelAnswer');
+  if(!form) return;
+  form.addEventListener('submit', async function(e){
+    e.preventDefault(); out.style.display='block'; out.textContent='Thinking…';
+    try {
+      var r=await fetch('{{ url_for("admin.admin_intelligence_ask") }}',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token() }}'},body:JSON.stringify({question:q.value})});
+      var data=await r.json();
+      if(!r.ok) throw new Error(data.error||'Unable to answer');
+      out.textContent=data.answer;
+    } catch(err) { out.textContent=err.message; }
+  });
+})();
+</script>
+{% endblock %}

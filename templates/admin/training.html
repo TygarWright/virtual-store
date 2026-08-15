@@ -1,0 +1,7 @@
+{% extends "admin/base.html" %}
+{% block title %}Staff Training{% endblock %}
+{% block content %}
+<div class="admin-topbar"><div><h1>Training Mode</h1><p style="color:var(--muted,#888);margin:.25rem 0 0;">Practice difficult cases without touching real customers or money.</p></div></div>
+<div class="dash-grid">{% for s in scenarios %}<section class="card-box"><h3>{{ s.title }}</h3><p>{{ s.prompt }}</p><form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="scenario" value="{{ s.id }}"><textarea class="admin-input" name="answer" rows="5" required placeholder="Describe exactly what you would do…"></textarea><button class="admin-btn admin-btn--primary" type="submit">Submit answer</button></form><details style="margin-top:1rem"><summary>Show safe playbook</summary><ul>{% for step in s.best %}<li>{{ step|capitalize }}</li>{% endfor %}</ul></details></section>{% endfor %}</div>
+{% if score is not none %}<div class="flash flash--success">Latest score: <strong>{{ score }}/100</strong>. Training results are logged to the decision journal.</div>{% endif %}
+{% endblock %}

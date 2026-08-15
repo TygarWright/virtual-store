@@ -8,32 +8,21 @@ window.getCsrfToken = function () {
 (function () {
   "use strict";
 
-  // ---------- Scroll progress bar ----------
-  var progress = document.querySelector(".scroll-progress");
-  function updateProgress() {
-    if (!progress) return;
-    var h = document.documentElement;
-    var max = h.scrollHeight - h.clientHeight;
-    var pct = max > 0 ? (h.scrollTop / max) * 100 : 0;
-    progress.style.width = pct + "%";
-  }
-
   // ---------- Nav shrink on scroll ----------
   var nav = document.querySelector(".nav");
   function updateNav() {
     if (!nav) return;
     nav.classList.toggle("scrolled", window.scrollY > 10);
+    nav.classList.toggle("scrolled-heavy", window.scrollY > 200);
   }
 
   document.addEventListener(
     "scroll",
     function () {
-      updateProgress();
       updateNav();
     },
     { passive: true }
   );
-  updateProgress();
   updateNav();
 
   // ---------- Scroll-reveal ----------
@@ -214,18 +203,20 @@ window.getCsrfToken = function () {
   // A tiny, elegant flicker of the scroll-progress bar every time a key is
   // pressed — physical keyboard, phone keyboard, anything that fires
   // keydown. Throttled so fast typing doesn't spam animations.
-  if (progress) {
+  (function () {
+    var sp = document.querySelector(".scroll-progress");
+    if (!sp) return;
     var keyPulseReady = true;
     document.addEventListener("keydown", function () {
       if (!keyPulseReady) return;
       keyPulseReady = false;
-      progress.classList.add("key-pulse");
+      sp.classList.add("key-pulse");
       setTimeout(function () {
-        progress.classList.remove("key-pulse");
+        sp.classList.remove("key-pulse");
         keyPulseReady = true;
       }, 260);
     });
-  }
+  })();
 
   // ---------- Typing spark ----------
   // Wakes a small dot cluster beside the search field the moment someone
@@ -282,6 +273,14 @@ var debounceTimer = null;
 var activeIndex = -1;
 var currentResults = [];
 
+// Escape user/database-supplied text before inserting into HTML strings
+// (defense-in-depth against XSS — Issue #8 from audit).
+function esc(s) {
+  var div = document.createElement("div");
+  div.textContent = s == null ? "" : String(s);
+  return div.innerHTML;
+}
+
 function render(results) {
   currentResults = results;
   activeIndex = -1;
@@ -292,12 +291,12 @@ function render(results) {
   }
   var html = results.map(function (r, i) {
     var img = r.image
-      ? '<img class="search-dropdown__thumb" src="/static/uploads/' + r.image + '" alt="" loading="lazy">'
-      : '<div class="search-dropdown__placeholder">' + (r.name[0] || "?") + "</div>";
-    var cat = r.category ? '<div class="search-dropdown__cat">' + r.category + "</div>" : "";
-    return '<a class="search-dropdown__item" href="/product/' + r.slug + '" role="option" data-index="' + i + '">' +
+      ? '<img class="search-dropdown__thumb" src="/uploads/' + esc(r.image) + '" alt="" loading="lazy">'
+      : '<div class="search-dropdown__placeholder">' + esc(r.name[0] || "?") + "</div>";
+    var cat = r.category ? '<div class="search-dropdown__cat">' + esc(r.category) + "</div>" : "";
+    return '<a class="search-dropdown__item" href="/product/' + encodeURIComponent(r.slug) + '" role="option" data-index="' + i + '">' +
       img +
-      '<div class="search-dropdown__info"><div class="search-dropdown__name">' + r.name + "</div>" + cat + "</div>" +
+      '<div class="search-dropdown__info"><div class="search-dropdown__name">' + esc(r.name) + "</div>" + cat + "</div>" +
       '<div class="search-dropdown__price">&#8377;' + r.price.toLocaleString("en-IN") + "</div>" +
       "</a>";
   }).join("");
@@ -359,6 +358,84 @@ document.addEventListener("click", function (e) {
 })();
 
 /* ============================================================
+Quick View Modal System
+============================================================ */
+window.openQuickView = function (productId) {
+  fetch("/api/product/" + productId + "/quick-view")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var overlay = document.createElement("div");
+      overlay.className = "quick-view-overlay";
+      overlay.id = "quickViewOverlay";
+
+      var imgHtml = data.image
+        ? '<img src="/uploads/' + data.image + '" alt="' + escHtml(data.name) + '">'
+        : '<div class="card__placeholder" style="font-size:3rem;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">' + escHtml(data.name[0] || "?") + '</div>';
+
+      var priceHtml = data.compare_price && data.compare_price > data.price
+        ? '<span style="text-decoration:line-through;opacity:0.5;margin-right:0.4rem;">₹' + data.compare_price.toLocaleString('en-IN') + '</span> ₹' + data.price.toLocaleString('en-IN')
+        : '₹' + data.price.toLocaleString('en-IN');
+
+      overlay.innerHTML = '<div class="quick-view-modal">' +
+        '<button class="quick-view-close" onclick="closeQuickView()">×</button>' +
+        '<div class="quick-view-modal__gallery">' + imgHtml + '</div>' +
+        '<div class="quick-view-modal__info">' +
+          '<span class="eyebrow">' + escHtml(data.category || "") + '</span>' +
+          '<h2>' + escHtml(data.name) + '</h2>' +
+          '<div class="quick-view-modal__price">' + priceHtml + '</div>' +
+          '<div class="quick-view-modal__desc">' + escHtml(data.short_description || "") + '</div>' +
+          '<div class="quick-view-modal__actions">' +
+            '<form action="/cart/add" method="POST" style="display:contents;">' +
+              '<input type="hidden" name="csrf_token" value="' + getCsrfToken() + '">' +
+              '<input type="hidden" name="product_id" value="' + productId + '">' +
+              '<input type="hidden" name="quantity" value="1">' +
+              '<button type="submit" class="btn btn--outline" style="flex:1;">Add to Cart</button>' +
+            '</form>' +
+            '<a href="/product/' + encodeURIComponent(data.slug) + '" class="btn" style="flex:1;text-align:center;">View Details</a>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+      document.body.appendChild(overlay);
+      requestAnimationFrame(function () { overlay.classList.add("open"); });
+      overlay.addEventListener("click", function (e) {
+        if (e.target === overlay) closeQuickView();
+      });
+      document.addEventListener("keydown", closeQuickViewEsc);
+    });
+};
+
+window.closeQuickView = function () {
+  var overlay = document.getElementById("quickViewOverlay");
+  if (!overlay) return;
+  overlay.classList.remove("open");
+  setTimeout(function () { overlay.remove(); }, 350);
+  document.removeEventListener("keydown", closeQuickViewEsc);
+};
+
+function closeQuickViewEsc(e) {
+  if (e.key === "Escape") closeQuickView();
+}
+
+function escHtml(s) {
+  var d = document.createElement("div");
+  d.textContent = s == null ? "" : String(s);
+  return d.innerHTML;
+}
+
+// Attach quick view to all card buttons
+(function () {
+  "use strict";
+  document.querySelectorAll(".card__quick-view").forEach(function (btn) {
+    btn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openQuickView(this.getAttribute("data-product-id"));
+    });
+  });
+})();
+
+/* ============================================================
  Keyboard shortcut: / to focus search
  ============================================================ */
 (function () {
@@ -368,6 +445,97 @@ document.addEventListener("keydown", function (e) {
   var input = document.getElementById("navSearchInput");
   if (input) { e.preventDefault(); input.focus(); }
 });
+})();
+
+/* ============================================================
+ Image carousel with smooth crossfade + prev/next + dots
+ ============================================================ */
+(function () {
+"use strict";
+var gallery = document.querySelector(".product-gallery__main");
+var mainImg = document.getElementById("mainImage");
+if (!gallery || !mainImg) return;
+var thumbs = document.querySelectorAll(".product-gallery__thumbs img");
+var currentIdx = 0;
+var autoTimer = null;
+var autoAdvance = 3000;
+ // only auto-play if more than 1 image
+
+function showImage(idx) {
+  if (idx < 0) idx = thumbs.length - 1;
+  if (idx >= thumbs.length) idx = 0;
+  currentIdx = idx;
+  // crossfade
+  mainImg.style.opacity = 0;
+  mainImg.style.transform = "scale(0.97)";
+  setTimeout(function () {
+    mainImg.src = thumbs[idx].src;
+    mainImg.style.opacity = 1;
+    mainImg.style.transform = "scale(1)";
+  }, 200);
+  thumbs.forEach(function (t, i) {
+    t.classList.toggle("active", i === idx);
+  });
+  // update dots if any
+  document.querySelectorAll(".product-gallery__dot").forEach(function (d, i) {
+    d.classList.toggle("active", i === idx);
+  });
+  resetAuto();
+}
+
+function resetAuto() {
+  if (!autoTimer && thumbs.length > 1) {
+    autoTimer = setInterval(function () {
+      showImage(currentIdx + 1);
+    }, autoAdvance);
+  }
+}
+
+function stopAuto() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+}
+
+if (thumbs.length > 1) {
+  // Add prev/next nav buttons
+  var nav = document.createElement("div");
+  nav.className = "product-gallery__nav";
+  nav.innerHTML = '<button id="galleryPrev" aria-label="Previous">‹</button><button id="galleryNext" aria-label="Next">›</button>';
+  gallery.appendChild(nav);
+
+  document.getElementById("galleryPrev").addEventListener("click", function (e) {
+    e.stopPropagation();
+    showImage(currentIdx - 1);
+  });
+  document.getElementById("galleryNext").addEventListener("click", function (e) {
+    e.stopPropagation();
+    showImage(currentIdx + 1);
+  });
+
+  // Add dot indicators
+  var dotWrap = document.createElement("div");
+  dotWrap.className = "product-gallery__dots";
+  for (var i = 0; i < thumbs.length; i++) {
+    var dot = document.createElement("button");
+    dot.className = "product-gallery__dot" + (i === 0 ? " active" : "");
+    dot.setAttribute("aria-label", "View image " + (i + 1));
+    (function (idx) {
+      dot.addEventListener("click", function () { showImage(idx); });
+    })(i);
+    dotWrap.appendChild(dot);
+  }
+  gallery.parentNode.appendChild(dotWrap);
+
+  // Auto-play only once per session, pause on hover
+  if (!sessionStorage.getItem('galleryAutoPlayed')) {
+    resetAuto();
+    sessionStorage.setItem('galleryAutoPlayed', '1');
+    // Stop after ~15s (5 intervals × 3s)
+    setTimeout(stopAuto, 15000);
+  }
+  gallery.addEventListener("mouseenter", stopAuto);
+  gallery.addEventListener("mouseleave", function () { if (thumbs.length > 1) autoTimer = setInterval(function () { showImage(currentIdx + 1); }, autoAdvance); });
+  gallery.addEventListener("touchstart", stopAuto);
+}
 })();
 
 /* ============================================================
@@ -384,25 +552,41 @@ document.querySelectorAll(".card__image img, .product-gallery__main img").forEac
 })();
 
 /* ============================================================
- Product card 3D tilt on hover (desktop only)
+ Product card 3D tilt — hover follow on desktop, press tilt on mobile
  ============================================================ */
 (function () {
 "use strict";
-if (window.matchMedia("(hover: none), (pointer: coarse)").matches) return;
 if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+var isTouch = window.matchMedia("(hover: none), (pointer: coarse)").matches;
+
 document.querySelectorAll(".card").forEach(function (card) {
-  card.addEventListener("mouseenter", function () { card.classList.add("tilting"); });
-  card.addEventListener("mousemove", function (e) {
-    if (!card.classList.contains("tilting")) return;
-    var rect = card.getBoundingClientRect();
-    var x = (e.clientX - rect.left) / rect.width - 0.5;
-    var y = (e.clientY - rect.top) / rect.height - 0.5;
-    card.style.transform = "translateY(-4px) perspective(800px) rotateX(" + (-y * 4) + "deg) rotateY(" + (x * 4) + "deg)";
-  });
-  card.addEventListener("mouseleave", function () {
-    card.classList.remove("tilting");
-    card.style.transform = "";
-  });
+  if (isTouch) {
+    // Touch: gentle press-tilt on hold, spring back on release
+    // Uses touchstart/touchend with passive:true so scrolling isn't blocked.
+    card.addEventListener("touchstart", function () {
+      card.style.transform = "perspective(800px) rotateX(3deg) rotateY(-2deg) scale(0.95)";
+      card.style.transition = "transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1)";
+    }, { passive: true });
+    card.addEventListener("touchend", function () {
+      card.style.transform = "";
+      card.style.transition = "transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)";
+    }, { passive: true });
+  } else {
+    // Desktop: mouse-follow tilt
+    card.classList.add("tilting");
+    card.addEventListener("mouseenter", function () { card.classList.add("tilting"); });
+    card.addEventListener("mousemove", function (e) {
+      if (!card.classList.contains("tilting")) return;
+      var rect = card.getBoundingClientRect();
+      var x = (e.clientX - rect.left) / rect.width - 0.5;
+      var y = (e.clientY - rect.top) / rect.height - 0.5;
+      card.style.transform = "translateY(-4px) perspective(800px) rotateX(" + (-y * 4) + "deg) rotateY(" + (x * 4) + "deg)";
+    });
+    card.addEventListener("mouseleave", function () {
+      card.classList.remove("tilting");
+      card.style.transform = "";
+    });
+  }
 });
 })();
 
@@ -435,11 +619,11 @@ function renderCart(data) {
   var html = '<div class="cart-preview__header">Your Cart (' + data.count + ')</div>';
   html += data.items.map(function (it) {
     var img = it.image
-      ? '<img class="cart-preview__thumb" src="/static/uploads/' + it.image + '" alt="">'
-      : '<div class="cart-preview__placeholder">' + (it.name[0] || "?") + "</div>";
+      ? '<img class="cart-preview__thumb" src="/uploads/' + esc(it.image) + '" alt="">'
+      : '<div class="cart-preview__placeholder">' + esc(it.name[0] || "?") + "</div>";
     return '<div class="cart-preview__item">' +
       img +
-      '<div class="cart-preview__info"><div class="cart-preview__name">' + it.name + '</div><div class="cart-preview__qty">Qty: ' + it.quantity + '</div></div>' +
+      '<div class="cart-preview__info"><div class="cart-preview__name">' + esc(it.name) + '</div><div class="cart-preview__qty">Qty: ' + it.quantity + '</div></div>' +
       '<div class="cart-preview__price">&#8377;' + it.line_total.toLocaleString("en-IN") + '</div>' +
       '</div>';
   }).join("");
@@ -586,23 +770,7 @@ if ("IntersectionObserver" in window) {
 }
 });
 
-// ---- 3D card tilt on mousemove (desktop only) ----
-if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
-document.querySelectorAll(".card").forEach(function (card) {
-  card.classList.add("card-tilt");
-  card.addEventListener("mousemove", function (e) {
-    var rect = card.getBoundingClientRect();
-    var px = (e.clientX - rect.left) / rect.width;
-    var py = (e.clientY - rect.top) / rect.height;
-    var rx = (py - 0.5) * -8;
-    var ry = (px - 0.5) * 8;
-    card.style.transform = "perspective(800px) rotateX(" + rx + "deg) rotateY(" + ry + "deg) translateY(-6px)";
-  });
-  card.addEventListener("mouseleave", function () {
-    card.style.transform = "";
-  });
-});
-}
+// ---- 3D card tilt on mousemove is handled above by the unified tilt block ----
 
 // ---- Magnetic button effect (desktop only) ----
 if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
@@ -652,4 +820,71 @@ btn.appendChild(ring);
 setTimeout(function () { ring.remove(); }, 600);
 });
 
+})();
+
+/* ============================================================
+ Page prefetch + gentle navigation smoothing
+ ============================================================ */
+(function () {
+"use strict";
+var seen = new Set();
+
+function isSameOriginInternal(url) {
+  try {
+    var u = new URL(url, window.location.href);
+    if (u.origin !== window.location.origin) return false;
+    if (!u.pathname || u.pathname === "/") return true;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function prefetch(href) {
+  if (!href || seen.has(href) || !isSameOriginInternal(href)) return;
+  seen.add(href);
+  try {
+    var link = document.createElement("link");
+    link.rel = "prefetch";
+    link.href = href;
+    document.head.appendChild(link);
+  } catch (e) {}
+  fetch(href, { credentials: "same-origin", cache: "force-cache" }).catch(function () {});
+}
+
+function arm(anchor) {
+  if (!anchor || !anchor.getAttribute) return;
+  var href = anchor.getAttribute("href");
+  if (!href || href === "#" || href.indexOf("javascript:") === 0) return;
+  prefetch(href);
+}
+
+document.addEventListener("pointerenter", function (e) {
+  var a = e.target.closest ? e.target.closest("a[href]") : null;
+  arm(a);
+}, true);
+
+document.addEventListener("focusin", function (e) {
+  var a = e.target.closest ? e.target.closest("a[href]") : null;
+  arm(a);
+}, true);
+
+document.addEventListener("touchstart", function (e) {
+  var a = e.target.closest ? e.target.closest("a[href]") : null;
+  arm(a);
+}, { passive: true, capture: true });
+
+document.addEventListener("click", function (e) {
+  var a = e.target.closest ? e.target.closest("a[href]") : null;
+  if (!a) return;
+  var href = a.getAttribute("href");
+  if (!href || href.charAt(0) === "#" || href.indexOf("javascript:") === 0) return;
+  if (!isSameOriginInternal(href)) return;
+  if (a.target === "_blank" || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  document.documentElement.classList.add("is-navigating");
+});
+
+window.addEventListener("pageshow", function () {
+  document.documentElement.classList.remove("is-navigating");
+});
 })();

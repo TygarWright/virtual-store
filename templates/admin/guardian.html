@@ -1,0 +1,14 @@
+{% extends "admin/base.html" %}
+{% block title %}TITAN Guardian{% endblock %}
+{% block content %}
+<div class="admin-topbar"><div><h1>TITAN Guardian</h1><p style="color:var(--muted,#888);margin:.25rem 0 0;">One place for things that need human attention.</p></div><form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="admin-btn admin-btn--primary" formaction="{{ url_for('admin.admin_guardian_scan') }}">Run scan</button></form></div>
+<div class="stat-grid">
+<div class="stat-card stat-card--hero"><div class="num">{{ result.risk_score }}</div><div class="label">Risk score</div></div>
+<div class="stat-card"><div class="num">{{ result.open_exceptions }}</div><div class="label">Open exceptions</div></div>
+<div class="stat-card"><div class="num">{{ result.severity_counts.get('critical',0) }}</div><div class="label">Critical</div></div>
+<div class="stat-card"><div class="num">{{ result.severity_counts.get('high',0) }}</div><div class="label">High</div></div></div>
+<section class="card-box"><h3>What needs attention</h3>
+{% if exceptions %}<div class="table-wrap"><table class="admin-table"><thead><tr><th>Severity</th><th>Problem</th><th>Entity</th><th>Owner</th><th>Due</th><th>Action</th></tr></thead><tbody>
+{% for e in exceptions %}<tr><td><span class="badge badge--{{ 'cancelled' if e.severity in ['critical','high'] else 'pending' }}">{{ e.severity }}</span></td><td><strong>{{ e.title }}</strong><br><small>{{ e.description }}</small></td><td>{{ e.entity }} #{{ e.entity_id }}</td><td>{{ e.assignee or 'Unassigned' }}</td><td>{{ e.due_at or '—' }}</td><td><form method="POST" action="{{ url_for('admin.admin_guardian_resolve', exception_id=e.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="resolution" class="admin-input" placeholder="Resolution" required><button class="admin-btn admin-btn--primary" type="submit">Resolve</button></form></td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p>No open exceptions. Guardian is quiet.</p>{% endif %}</section>
+{% endblock %}

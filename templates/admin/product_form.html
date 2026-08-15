@@ -1,13 +1,25 @@
 {% extends "admin/base.html" %}
 {% block title %}{{ 'Edit Product' if product else 'New Product' }}{% endblock %}
 {% block content %}
+<style>
+@media (max-width: 640px) {
+  .product-form { flex-direction: column; }
+  .product-form .field { width: 100%; }
+}
+</style>
 <div class="admin-topbar">
   <h1>{{ 'Edit Product' if product else 'New Product' }}</h1>
-  <a href="{{ url_for('admin_products') }}" class="btn btn--outline btn--sm">← Back to Products</a>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+    {% if product %}
+    <a href="{{ url_for('storefront.product_detail', slug=product.slug) }}" target="_blank" class="btn btn--outline btn--sm">👁 View as Customer</a>
+    {% endif %}
+    <a href="{{ url_for('admin.admin_products') }}" class="btn btn--outline btn--sm">← Back to Products</a>
+  </div>
 </div>
 
-<form method="POST" enctype="multipart/form-data">
+<form method="POST" enctype="multipart/form-data" class="product-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if request.args.get("approval_id") %}<input type="hidden" name="approval_id" value="{{ request.args.get("approval_id") }}">{% endif %}
 
   <div class="card-box">
     <div class="field">
@@ -17,6 +29,21 @@
     <div class="field">
       <label>Price (in ₹, whole rupees)</label>
       <input type="number" name="price" min="0" step="1" value="{{ product.price if product else '' }}" required>
+    </div>
+    <div class="field">
+      <label>Stock Quantity</label>
+      <input type="number" name="quantity" min="0" step="1" value="{{ product.quantity|default(0, true) if product else 0 }}">
+      <small>Set to 0 for out of stock. Leave as-is for unlimited stock.</small>
+    </div>
+    <div class="field">
+      <label>Cost Price (internal)</label>
+      <input type="number" name="cost_price" min="0" step="1" value="{{ product.cost_price|default(0, true) if product else 0 }}">
+      <small>What this item costs the business. Customers never see this. Used to protect minimum margins.</small>
+    </div>
+    <div class="field">
+      <label>Minimum Margin (%)</label>
+      <input type="number" name="min_margin_percent" min="0" max="100" step="1" value="{{ product.min_margin_percent|default(15, true) if product else 15 }}">
+      <small>Promotions cannot reduce the known margin below this level.</small>
     </div>
     <div class="field">
       <label>Compare-at Price (optional)</label>
@@ -82,23 +109,64 @@
         Automatic — deliver instantly the moment payment is confirmed
       </label>
     </div>
+    <div class="field" style="margin-top:1.2rem;">
+      <label>Delivery Content Type</label>
+      <select name="delivery_content_type" style="max-width:300px;">
+        {% set dct = product.delivery_content_type if product else '' %}
+        <option value="" {{ 'selected' if not dct }}>Auto-detect</option>
+        <option value="file" {{ 'selected' if dct == 'file' }}>📁 File Download</option>
+        <option value="license_key" {{ 'selected' if dct == 'license_key' }}>🔑 License Key</option>
+        <option value="access_link" {{ 'selected' if dct == 'access_link' }}>🔗 Access Link</option>
+        <option value="instructions" {{ 'selected' if dct == 'instructions' }}>📝 Instructions</option>
+      </select>
+      <small>How this item renders on the customer's delivery page. Auto-detect guesses based on content, but you can override.</small>
+    </div>
+
     <div class="field" id="autoDeliveryBox"
          style="display:{{ 'block' if product and product.delivery_mode == 'automatic' else 'none' }};">
       <label>What to send automatically</label>
       <textarea name="auto_delivery_content" style="min-height:120px;"
                 placeholder="e.g. Download link: https://... &#10;License key: XXXX-XXXX-XXXX">{{ product.auto_delivery_content if product else '' }}</textarea>
       <small>Sent by email and shown on the customer's order tracking page the instant they pay — no admin step needed. For a one-time-use code (like a license key), remember this same text goes to every buyer unless you also manage stock/uniqueness yourself.</small>
-    </div>
-  </div>
+      </div>
 
-  <div class="card-box">
+      <div class="field">
+        <label>Product Files</label>
+        <input type="file" name="product_files" multiple accept=".pdf,.zip,.txt,.csv,.json,.doc,.docx,.jpg,.png,.gif,.mp3,.mp4,.epub,.mobi">
+        <small>Upload files that customers download after purchase. Supported: PDF, ZIP, images, audio, video, docs, ebooks (100MB max per file).</small>
+        {% if product_files %}
+        <div style="margin-top:0.6rem;">
+          {% for f in product_files %}
+          {% set dl_url = url_for('admin.admin_product_file_download', file_id=f.id, _external=True) %}
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.4rem;margin-bottom:0.4rem;padding:0.5rem;border:1px solid var(--grey-200);border-radius:8px;">
+            <span style="font-size:0.85rem;flex:1;min-width:120px;">📎 {{ f.original_name }}
+              {% if f.version and f.version > 1 %}<span class="badge badge--version">v{{ f.version }}</span>{% endif %}
+              ({{ '{:,}'.format(f.file_size//1024) if f.file_size > 1024 else f.file_size }} KB)</span>
+            <button class="btn btn--sm btn--outline" onclick="var i=this.nextElementSibling; i.select(); i.setSelectionRange(0,99999); navigator.clipboard.writeText(i.value).then(function(){this.textContent='Copied!';setTimeout(function(){this.textContent='Copy Link'}.bind(this),2000)}.bind(this)); return false;" title="Copy download link">Copy Link</button>
+            <input type="text" value="{{ dl_url }}" readonly style="position:absolute;left:-9999px;width:1px;" aria-hidden="true">
+            <form method="POST" action="{{ url_for('admin.admin_product_file_delete', file_id=f.id) }}" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn--sm btn--outline" style="color:#7a2222;" onclick="return confirm('Remove this file?');">Remove</button>
+            </form>
+          </div>
+          {% endfor %}
+          <div style="margin-top:0.5rem;">
+            <button class="btn btn--sm btn--outline" onclick="fillDeliveryLinks(); return false;">📋 Copy all file links to clipboard</button>
+          </div>
+          <small style="display:block; margin-top:0.3rem;">Upload a file with the same name as an existing one to replace it (version bumps automatically).</small>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card-box">
     <h3>Product Images</h3>
     {% if images %}
     <div class="image-upload-grid">
       {% for img in images %}
       <div class="thumb-wrap">
-        <img src="{{ url_for('static', filename='uploads/' ~ img.filename) }}">
-        <form method="POST" action="{{ url_for('admin_product_image_delete', image_id=img.id) }}"
+        <img src="{{ url_for('storefront.uploaded_file', filename=img.filename) }}">
+        <form method="POST" action="{{ url_for('admin.admin_product_image_delete', image_id=img.id) }}"
               onsubmit="return confirm('Remove this image?');">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="product_id" value="{{ product.id }}">

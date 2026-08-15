@@ -1,0 +1,48 @@
+{% extends "admin/base.html" %}
+{% block title %}Customers{% endblock %}
+{% block content %}
+<div class="admin-topbar">
+  <div>
+    <h1>Customers</h1>
+    <p class="admin-table__muted">{{ total }} customer{{ '' if total == 1 else 's' }} in your store</p>
+  </div>
+</div>
+
+<form method="GET" action="{{ url_for('admin.admin_customers') }}" style="margin-bottom:1.25rem;max-width:520px;display:flex;gap:.6rem;">
+  <label for="customerSearch" class="sr-only">Search customers</label>
+  <input id="customerSearch" type="search" name="q" value="{{ q }}" placeholder="Search name, email or phone…" autocomplete="off"
+         style="flex:1;padding:.7rem .85rem;border:1px solid var(--border);border-radius:4px;font-family:var(--sans);">
+  <button class="btn btn--outline btn--sm" type="submit">Search</button>
+  {% if q %}<a class="btn btn--outline btn--sm" href="{{ url_for('admin.admin_customers') }}">Clear</a>{% endif %}
+</form>
+
+{% if customers %}
+<div class="table-wrap">
+<table class="table">
+  <thead><tr><th>Customer</th><th>Contact</th><th>Orders</th><th>Lifetime value</th><th>Last order</th><th>Joined</th><th></th></tr></thead>
+  <tbody>
+  {% for c in customers %}
+  <tr>
+    <td><strong>{{ c.name or 'Unnamed customer' }}</strong><br><small class="admin-table__muted">#{{ c.id }}</small></td>
+    <td>{{ c.email or '—' }}{% if c.phone %}<br><small class="admin-table__muted">{{ c.phone }}</small>{% endif %}</td>
+    <td>{{ c.order_count }}</td>
+    <td>{{ settings.currency_symbol }}{{ "{:,}".format(c.lifetime_value or 0) }}</td>
+    <td>{{ c.last_order_at or '—' }}</td><td><a class="text-link" href="{{ url_for('admin.admin_customer_timeline', customer_id=c.id) }}">View timeline →</a></td>
+    <td>{{ c.created_at or '—' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if total_pages > 1 %}
+<nav class="pagination" aria-label="Customer pages">
+  {% if page > 1 %}<a class="btn btn--outline btn--sm" href="{{ url_for('admin.admin_customers', q=q, page=page-1) }}">← Previous</a>{% endif %}
+  <span class="pagination__status">Page {{ page }} of {{ total_pages }}</span>
+  {% if page < total_pages %}<a class="btn btn--outline btn--sm" href="{{ url_for('admin.admin_customers', q=q, page=page+1) }}">Next →</a>{% endif %}
+</nav>
+{% endif %}
+{% else %}
+<div class="empty-state"><h3>No customers found</h3><p>Try a different name, email or phone number.</p></div>
+{% endif %}
+{% endblock %}

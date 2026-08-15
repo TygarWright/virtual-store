@@ -11,24 +11,24 @@
 <div class="card-box">
   <div class="sortable-row" style="justify-content:space-between; margin-bottom:1rem;">
     <div class="sortable-row">
-      <form method="POST" action="{{ url_for('admin_sections_move', section_id=s.id, direction='up') }}">
+      <form method="POST" action="{{ url_for('admin.admin_sections_move', section_id=s.id, direction='up') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn--outline btn--sm" type="submit" {{ 'disabled' if loop.first }}>↑</button>
       </form>
-      <form method="POST" action="{{ url_for('admin_sections_move', section_id=s.id, direction='down') }}">
+      <form method="POST" action="{{ url_for('admin.admin_sections_move', section_id=s.id, direction='down') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn--outline btn--sm" type="submit" {{ 'disabled' if loop.last }}>↓</button>
       </form>
       <strong>{{ s.title }}</strong>
       {% if not s.visible %}<span class="badge badge--cancelled">Hidden</span>{% endif %}
     </div>
-    <form method="POST" action="{{ url_for('admin_sections_delete', section_id=s.id) }}"
+    <form method="POST" action="{{ url_for('admin.admin_sections_delete', section_id=s.id) }}"
           onsubmit="return confirm('Delete this section? This cannot be undone.');">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn--danger btn--sm" type="submit">Delete</button>
     </form>
   </div>
-  <form method="POST" action="{{ url_for('admin_sections_save') }}">
+  <form method="POST" action="{{ url_for('admin.admin_sections_save') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="id" value="{{ s.id }}">
     <div class="field">
@@ -50,7 +50,7 @@
 
 <div class="card-box">
   <h3>Add New Section</h3>
-  <form method="POST" action="{{ url_for('admin_sections_save') }}">
+  <form method="POST" action="{{ url_for('admin.admin_sections_save') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="field">
       <label>Title</label>

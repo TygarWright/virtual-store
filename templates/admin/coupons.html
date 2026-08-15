@@ -10,8 +10,9 @@
 
 <div class="card-box">
   <h3>Create New Coupon</h3>
-  <form method="POST" action="{{ url_for('admin_coupons_save') }}">
+  <form method="POST" action="{{ url_for('admin.admin_coupons_save') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if request.args.get("approval_id") %}<input type="hidden" name="approval_id" value="{{ request.args.get("approval_id") }}">{% endif %}
 
     <div class="field">
       <label>Code</label>
@@ -155,11 +156,11 @@
       {% endif %}
     </td>
     <td class="row-actions">
-      <form method="POST" action="{{ url_for('admin_coupons_toggle', coupon_id=c.id) }}">
+      <form method="POST" action="{{ url_for('admin.admin_coupons_toggle', coupon_id=c.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn--outline btn--sm" type="submit">{{ 'Deactivate' if c.active else 'Activate' }}</button>
       </form>
-      <form method="POST" action="{{ url_for('admin_coupons_delete', coupon_id=c.id) }}"
+      <form method="POST" action="{{ url_for('admin.admin_coupons_delete', coupon_id=c.id) }}"
             onsubmit="return confirm('Delete this coupon?');">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn--danger btn--sm" type="submit">Delete</button>
@@ -172,7 +173,7 @@
 <div class="empty-state">No coupons yet.</div>
 {% endif %}
 
-<script>
+<script nonce="{{ csp_nonce }}">
 // Show/hide conditional fields based on trigger type and auto_apply checkbox
 (function() {
   var autoCheck = document.getElementById('coupon-auto-apply');

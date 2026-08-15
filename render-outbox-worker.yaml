@@ -1,0 +1,21 @@
+# Optional Render background worker for deployments using a shared remote
+# database (Turso). Do NOT attach this worker to a local-SQLite-only deployment:
+# Render persistent disks are service-local. The worker needs the same shared DB
+# as the web service.
+services:
+  - type: worker
+    name: virtual-store-outbox
+    env: python
+    buildCommand: rm -rf .venv && python3 -m venv .venv && . .venv/bin/activate && pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
+    startCommand: python workers/outbox_worker.py
+    envVars:
+      - key: OUTBOX_WORKER_ENABLED
+        value: "true"
+      - key: OUTBOX_POLL_SECONDS
+        value: "2"
+      - key: SECRET_KEY
+        sync: false
+      - key: TURSO_DB_URL
+        sync: false
+      - key: TURSO_DB_AUTH_TOKEN
+        sync: false

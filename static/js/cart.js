@@ -60,11 +60,17 @@
           }
 
           // Cart badge bounce
-          document.querySelectorAll(".nav__cart-badge, .bottom-nav__badge").forEach(function (badge) {
+          document.querySelectorAll(".nav__cart-badge").forEach(function (badge) {
             badge.classList.remove("cart-bounce");
             void badge.offsetWidth;
             badge.classList.add("cart-bounce");
           });
+          var bottomBadge = document.querySelector(".bottom-nav__badge");
+          if (bottomBadge) {
+            bottomBadge.classList.remove("cart-bounce");
+            void bottomBadge.offsetWidth;
+            bottomBadge.classList.add("cart-bounce");
+          }
 
           // Cart icon jiggle
           document.querySelectorAll(".nav__cart").forEach(function (cart) {
