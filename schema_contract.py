@@ -162,6 +162,27 @@ CRITICAL_COLUMNS = [
 ]
 
 
+# These tables are intentionally created lazily by their owning subsystem.
+# Their absence must not prevent the whole application from booting. Once the
+# subsystem creates the table, the same contract still validates/repairs its
+# required columns.
+LAZY_TABLES = {
+    "domain_event_deliveries",
+    "team_message_reactions",
+    "reconciliation_locks",
+    "experiment_exposure_events",
+    "experiment_guardrail_history",
+    "approval_delegations",
+    "segregation_rules",
+    "guardian_detectors",
+    "exception_events",
+    "observability_alert_policies",
+    "observability_slo_policies",
+    "simulation_scenarios",
+    "training_attempts",
+}
+
+
 def table_columns(conn, table: str) -> set[str]:
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return {str(row[1]) for row in rows}
@@ -172,6 +193,11 @@ def missing_columns(conn, specs: Iterable[ColumnSpec] = CRITICAL_COLUMNS) -> lis
     missing: list[ColumnSpec] = []
     for spec in specs:
         cols = cache.setdefault(spec.table, table_columns(conn, spec.table))
+        # Lazy subsystem tables are allowed to be absent during application boot.
+        # Their owning service creates them before first use; once present, their
+        # required columns remain subject to the contract.
+        if not cols and spec.table in LAZY_TABLES:
+            continue
         if spec.name not in cols:
             missing.append(spec)
     return missing
