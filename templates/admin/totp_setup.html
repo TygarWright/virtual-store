@@ -1,3 +1,4 @@
+{% from "admin/_icons.html" import icon %}
 {% extends "admin/base.html" %}
 {% block title %}Two-Factor Auth{% endblock %}
 {% block content %}
@@ -32,7 +33,7 @@
     </details>
 
   {% elif totp_enabled and show_recovery_codes %}
-    <h3>🔐 Save Your Recovery Codes</h3>
+    <h3>{{ icon("file-lock") }} Save Your Recovery Codes</h3>
     <p style="font-size:0.85rem;color:var(--grey-500);">
       These 10 single-use codes let you log in if you lose access to your authenticator app.
       <strong>Save them somewhere safe</strong> — each code can only be used once, and they won't be shown again.
@@ -48,7 +49,7 @@
     </p>
 
   {% else %}
-    <h3>🔐 Set Up Two-Factor Auth</h3>
+    <h3>{{ icon("shield") }} Set Up Two-Factor Auth</h3>
     {% if secret %}
     <p style="font-size:0.85rem;color:var(--grey-500);">Scan this QR code with your authenticator app, or tap the link below on your phone.</p>
 

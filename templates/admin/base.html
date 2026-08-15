@@ -1,3 +1,4 @@
+{% from "admin/_icons.html" import icon %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -106,19 +107,19 @@
       </a>
       {% endif %}
       {% if admin_can('audit.view') %}
-      <a href="{{ url_for('admin.admin_guardian') }}" class="{{ 'active' if admin_nav_active('guardian') }}" onclick="closeAdminMenu()">🛡️ Guardian</a>
+      <a href="{{ url_for('admin.admin_guardian') }}" class="{{ 'active' if admin_nav_active('guardian') }}" onclick="closeAdminMenu()">{{ icon("shield") }} Guardian</a>
       {% endif %}
       {% if admin_can('analytics.view') %}
-      <a href="{{ url_for('admin.admin_simulation_lab') }}" class="{{ 'active' if admin_nav_active('simulation') }}" onclick="closeAdminMenu()">🧪 Simulation Lab</a>
+      <a href="{{ url_for('admin.admin_simulation_lab') }}" class="{{ 'active' if admin_nav_active('simulation') }}" onclick="closeAdminMenu()">{{ icon("flask") }} Simulation Lab</a>
       {% endif %}
       {% if admin_can('tickets.create') %}
-      <a href="{{ url_for('admin.admin_training') }}" class="{{ 'active' if admin_nav_active('training') }}" onclick="closeAdminMenu()">🎓 Training Mode</a>
+      <a href="{{ url_for('admin.admin_training') }}" class="{{ 'active' if admin_nav_active('training') }}" onclick="closeAdminMenu()">{{ icon("graduation") }} Training Mode</a>
       {% endif %}
       {% if admin_can('team.chat') %}
-      <a href="{{ url_for('admin.admin_team_hub') }}" class="{{ 'active' if admin_nav_active('team_hub') }}" onclick="closeAdminMenu()">💬 Team Hub</a>
+      <a href="{{ url_for('admin.admin_team_hub') }}" class="{{ 'active' if admin_nav_active('team_hub') }}" onclick="closeAdminMenu()">{{ icon("chat") }} Team Hub</a>
       {% endif %}
       {% if admin_can('content.manage') %}
-      <a href="{{ url_for('admin.admin_notices') }}" class="{{ 'active' if admin_nav_active('notices') }}" onclick="closeAdminMenu()">📢 Site Notices</a>
+      <a href="{{ url_for('admin.admin_notices') }}" class="{{ 'active' if admin_nav_active('notices') }}" onclick="closeAdminMenu()">{{ icon("megaphone") }} Site Notices</a>
       {% endif %}
       <div class="divider-light"></div>
       <a href="{{ url_for('storefront.home') }}" target="_blank" onclick="closeAdminMenu()">

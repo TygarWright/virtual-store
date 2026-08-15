@@ -1,3 +1,4 @@
+{% from "admin/_icons.html" import icon %}
 {% extends "admin/base.html" %}
 {% block title %}{{ 'Edit Product' if product else 'New Product' }}{% endblock %}
 {% block content %}
@@ -11,7 +12,7 @@
   <h1>{{ 'Edit Product' if product else 'New Product' }}</h1>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
     {% if product %}
-    <a href="{{ url_for('storefront.product_detail', slug=product.slug) }}" target="_blank" class="btn btn--outline btn--sm">👁 View as Customer</a>
+    <a href="{{ url_for('storefront.product_detail', slug=product.slug) }}" target="_blank" class="btn btn--outline btn--sm">{{ icon("eye") }} View as Customer</a>
     {% endif %}
     <a href="{{ url_for('admin.admin_products') }}" class="btn btn--outline btn--sm">← Back to Products</a>
   </div>
@@ -114,10 +115,10 @@
       <select name="delivery_content_type" style="max-width:300px;">
         {% set dct = product.delivery_content_type if product else '' %}
         <option value="" {{ 'selected' if not dct }}>Auto-detect</option>
-        <option value="file" {{ 'selected' if dct == 'file' }}>📁 File Download</option>
-        <option value="license_key" {{ 'selected' if dct == 'license_key' }}>🔑 License Key</option>
-        <option value="access_link" {{ 'selected' if dct == 'access_link' }}>🔗 Access Link</option>
-        <option value="instructions" {{ 'selected' if dct == 'instructions' }}>📝 Instructions</option>
+        <option value="file" {{ 'selected' if dct == 'file' }}>File Download</option>
+        <option value="license_key" {{ 'selected' if dct == 'license_key' }}>License Key</option>
+        <option value="access_link" {{ 'selected' if dct == 'access_link' }}>Access Link</option>
+        <option value="instructions" {{ 'selected' if dct == 'instructions' }}>Instructions</option>
       </select>
       <small>How this item renders on the customer's delivery page. Auto-detect guesses based on content, but you can override.</small>
     </div>
@@ -139,7 +140,7 @@
           {% for f in product_files %}
           {% set dl_url = url_for('admin.admin_product_file_download', file_id=f.id, _external=True) %}
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.4rem;margin-bottom:0.4rem;padding:0.5rem;border:1px solid var(--grey-200);border-radius:8px;">
-            <span style="font-size:0.85rem;flex:1;min-width:120px;">📎 {{ f.original_name }}
+            <span style="font-size:0.85rem;flex:1;min-width:120px;">{{ icon("clip") }} {{ f.original_name }}
               {% if f.version and f.version > 1 %}<span class="badge badge--version">v{{ f.version }}</span>{% endif %}
               ({{ '{:,}'.format(f.file_size//1024) if f.file_size > 1024 else f.file_size }} KB)</span>
             <button class="btn btn--sm btn--outline" onclick="var i=this.nextElementSibling; i.select(); i.setSelectionRange(0,99999); navigator.clipboard.writeText(i.value).then(function(){this.textContent='Copied!';setTimeout(function(){this.textContent='Copy Link'}.bind(this),2000)}.bind(this)); return false;" title="Copy download link">Copy Link</button>
@@ -151,7 +152,7 @@
           </div>
           {% endfor %}
           <div style="margin-top:0.5rem;">
-            <button class="btn btn--sm btn--outline" onclick="fillDeliveryLinks(); return false;">📋 Copy all file links to clipboard</button>
+            <button class="btn btn--sm btn--outline" onclick="fillDeliveryLinks(); return false;">{{ icon("clipboard") }} Copy all file links to clipboard</button>
           </div>
           <small style="display:block; margin-top:0.3rem;">Upload a file with the same name as an existing one to replace it (version bumps automatically).</small>
         </div>

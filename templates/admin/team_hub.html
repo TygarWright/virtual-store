@@ -1,3 +1,4 @@
+{% from "admin/_icons.html" import icon %}
 {% extends "admin/base.html" %}
 {% block title %}Team Hub{% endblock %}
 {% block content %}
@@ -7,7 +8,7 @@
     <h3>Conversations</h3>
     {% for c in conversations %}
       <a href="{{ url_for('admin.admin_team_hub', conversation=c.id) }}" style="display:block;padding:.75rem;border-radius:10px;{% if c.id==selected.id %}background:var(--bg-secondary);{% endif %}">
-        <strong>{% if c.kind=='global' %}🌐{% elif c.kind=='direct' %}👤{% else %}👥{% endif %} {{ c.title if c.title else c.target_username }}</strong>
+        <strong>{% if c.kind=='global' %}{{ icon('globe') }}{% elif c.kind=='direct' %}{{ icon('user') }}{% else %}{{ icon('users') }}{% endif %} {{ c.title if c.title else c.target_username }}</strong>
         {% if c.unread_count %}<span class="admin-nav__badge">{{ c.unread_count }}</span>{% endif %}
       </a>
     {% endfor %}

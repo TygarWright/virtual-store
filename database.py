@@ -350,6 +350,7 @@ MIGRATIONS = [
     "ALTER TABLE admin_ticket_replies ADD COLUMN attachment_name TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE admin_ticket_replies ADD COLUMN attachment_path TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE orders ADD COLUMN inventory_reservation_id TEXT",
+    "ALTER TABLE business_exceptions ADD COLUMN assigned_to INTEGER REFERENCES admin_users(id)",
     "ALTER TABLE business_exceptions ADD COLUMN due_at TEXT",
     "ALTER TABLE business_exceptions ADD COLUMN escalated_at TEXT",
     "ALTER TABLE business_exceptions ADD COLUMN escalation_reason TEXT NOT NULL DEFAULT ''",
@@ -582,6 +583,10 @@ SCHEMA_EXTRA = """
       resolution TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       resolved_at TEXT,
+      assigned_to INTEGER REFERENCES admin_users(id),
+      due_at TEXT,
+      escalated_at TEXT,
+      escalation_reason TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_exceptions_status_severity ON business_exceptions(status, severity, created_at);
@@ -837,6 +842,31 @@ def _record_migration(conn, migration_id):
     )
 
 
+def _ensure_business_exception_columns(conn):
+    """Repair additive governance columns even if a prior migration was recorded
+    before the DDL actually became durable. This is intentionally schema-aware
+    rather than migration-led so long-lived deployments can self-heal safely.
+    """
+    required = {
+        "assigned_to": "INTEGER REFERENCES admin_users(id)",
+        "due_at": "TEXT",
+        "escalated_at": "TEXT",
+        "escalation_reason": "TEXT NOT NULL DEFAULT ''",
+    }
+    rows = conn.execute("PRAGMA table_info(business_exceptions)").fetchall()
+    existing = {str(r[1]) for r in rows}
+    for name, definition in required.items():
+        if name in existing:
+            continue
+        try:
+            conn.execute(f"ALTER TABLE business_exceptions ADD COLUMN {name} {definition}")
+        except sqlite3.OperationalError as exc:
+            message = str(exc).lower()
+            if "duplicate column" not in message and "already exists" not in message:
+                raise
+    conn.commit()
+
+
 def _apply_migrations(conn):
     """Apply additive migrations once, and remember which ones were applied.
 
@@ -876,6 +906,12 @@ def _apply_migrations(conn):
             # (e.g. stream timeout) we'll just re-check next boot and the
             # ALTER TABLE will be skipped via the duplicate-column guard above.
             pass
+
+
+    # Repair the governance table from actual schema state, not migration history.
+    # This protects long-lived deployments where an earlier migration was marked
+    # applied even though the DDL did not persist.
+    _ensure_business_exception_columns(conn)
 
 
 DEFAULT_SETTINGS = {

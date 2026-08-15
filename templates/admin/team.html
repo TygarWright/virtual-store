@@ -1,3 +1,4 @@
+{% from "admin/_icons.html" import icon %}
 {% extends "admin/base.html" %}
 {% block title %}Team{% endblock %}
 {% block content %}
@@ -77,17 +78,17 @@
         <label>Quick role</label>
         <div class="role-preset-grid" id="addPresetGrid">
           <button type="button" class="role-preset-card" data-preset="order_manager" onclick="selectPreset(this,'add')">
-            <span class="role-preset-card__icon">📦</span>
+            <span class="role-preset-card__icon">{{ icon("box") }}</span>
             <span class="role-preset-card__name">Order Manager</span>
             <span class="role-preset-card__desc">View, refund, export orders</span>
           </button>
           <button type="button" class="role-preset-card" data-preset="catalog_manager" onclick="selectPreset(this,'add')">
-            <span class="role-preset-card__icon">🛍️</span>
+            <span class="role-preset-card__icon">{{ icon("bag") }}</span>
             <span class="role-preset-card__name">Catalog Manager</span>
             <span class="role-preset-card__desc">Add &amp; edit products</span>
           </button>
           <button type="button" class="role-preset-card" data-preset="support_agent" onclick="selectPreset(this,'add')">
-            <span class="role-preset-card__icon">🎧</span>
+            <span class="role-preset-card__icon">{{ icon("headset") }}</span>
             <span class="role-preset-card__name">Support Agent</span>
             <span class="role-preset-card__desc">View orders only</span>
           </button>
@@ -141,13 +142,13 @@
         <label>Quick role</label>
         <div class="role-preset-grid" id="editPresetGrid">
           <button type="button" class="role-preset-card" data-preset="order_manager" onclick="selectPreset(this,'edit')">
-            <span class="role-preset-card__icon">📦</span><span class="role-preset-card__name">Order Manager</span>
+            <span class="role-preset-card__icon">{{ icon("box") }}</span><span class="role-preset-card__name">Order Manager</span>
           </button>
           <button type="button" class="role-preset-card" data-preset="catalog_manager" onclick="selectPreset(this,'edit')">
-            <span class="role-preset-card__icon">🛍️</span><span class="role-preset-card__name">Catalog Manager</span>
+            <span class="role-preset-card__icon">{{ icon("bag") }}</span><span class="role-preset-card__name">Catalog Manager</span>
           </button>
           <button type="button" class="role-preset-card" data-preset="support_agent" onclick="selectPreset(this,'edit')">
-            <span class="role-preset-card__icon">🎧</span><span class="role-preset-card__name">Support Agent</span>
+            <span class="role-preset-card__icon">{{ icon("headset") }}</span><span class="role-preset-card__name">Support Agent</span>
           </button>
           <button type="button" class="role-preset-card role-preset-card--custom" data-preset="custom" onclick="selectPreset(this,'edit')">
             <span class="role-preset-card__icon">⚙️</span><span class="role-preset-card__name">Custom</span>

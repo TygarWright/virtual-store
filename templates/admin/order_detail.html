@@ -1,10 +1,11 @@
+{% from "admin/_icons.html" import icon %}
 {% extends "admin/base.html" %}
 {% block title %}Order {{ order.order_ref }}{% endblock %}
 {% block content %}
 <div class="admin-topbar">
   <h1>Order {{ order.order_ref }}</h1>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-    <a href="{{ url_for('storefront.track_order') }}?order_ref={{ order.order_ref }}&email={{ order.customer_email | urlencode }}" target="_blank" class="btn btn--outline btn--sm">👁 Customer View</a>
+    <a href="{{ url_for('storefront.track_order') }}?order_ref={{ order.order_ref }}&email={{ order.customer_email | urlencode }}" target="_blank" class="btn btn--outline btn--sm">{{ icon("eye") }} Customer View</a>
     <a href="{{ url_for('admin.admin_orders') }}" class="btn btn--outline btn--sm">← Back to Orders</a>
   </div>
 </div>
@@ -33,7 +34,7 @@
   {% endif %}
   <p><strong>Status:</strong> <span class="badge badge--{{ order.status }}">{{ order.status }}</span>{% if order.payment_mode == 'test' %} <span class="badge badge--test">testing mode</span>{% endif %}
   {% if order.status not in ['created', 'cancelled'] %}
-    <a href="{{ url_for('admin.admin_order_invoice', order_id=order.id) }}" class="btn btn--sm btn--outline" style="margin-left:0.5rem;">📄 Download Invoice</a>
+    <a href="{{ url_for('admin.admin_order_invoice', order_id=order.id) }}" class="btn btn--sm btn--outline" style="margin-left:0.5rem;">{{ icon("document") }} Download Invoice</a>
   {% endif %}
   </p>
   <p><strong>Customer:</strong> {{ order.customer_name }}</p>
@@ -70,12 +71,12 @@
         {% for f in product_files %}
         {% set dl_url = url_for('storefront.download_product', token=f.download_token, _external=True) if f.download_token else url_for('admin.admin_product_file_download', file_id=f.id, _external=True) %}
         <div style="display:flex;align-items:center;gap:0.3rem;margin-bottom:0.2rem;">
-          <span style="flex:1;">📎 {{ f.original_name }}</span>
+          <span style="flex:1;">{{ icon("clip") }} {{ f.original_name }}</span>
           <button type="button" class="btn btn--sm btn--outline" onclick="var i=document.getElementById('dlInput{{ f.id }}'); i.select(); i.setSelectionRange(0,99999); navigator.clipboard.writeText(i.value).then(function(){this.textContent='Copied!';setTimeout(function(){this.textContent='Copy'}.bind(this),2000)}.bind(this)); return false;">Copy</button>
           <input id="dlInput{{ f.id }}" type="text" value="{{ dl_url }}" readonly style="position:absolute;left:-9999px;width:1px;" aria-hidden="true">
         </div>
         {% endfor %}
-        <button type="button" class="btn btn--sm btn--outline" style="margin-top:0.3rem;" onclick="fillDeliveryWithFileLinks()">📋 Auto-fill message with file links</button>
+        <button type="button" class="btn btn--sm btn--outline" style="margin-top:0.3rem;" onclick="fillDeliveryWithFileLinks()">{{ icon("clipboard") }} Auto-fill message with file links</button>
       </div>
       {% endif %}
       <div style="margin-bottom:0.3rem;display:flex;gap:0.3rem;flex-wrap:wrap;">
@@ -95,10 +96,10 @@
       <label>Delivery Content Type</label>
       <select name="delivery_content_type_override" style="max-width:300px;">
         <option value="">Auto-detect ({{ product.delivery_content_type or 'file' }})</option>
-        <option value="file" {% if product.delivery_content_type == 'file' %}selected{% endif %}>📎 File</option>
-        <option value="license_key" {% if product.delivery_content_type == 'license_key' %}selected{% endif %}>🔑 License Key</option>
-        <option value="access_link" {% if product.delivery_content_type == 'access_link' %}selected{% endif %}>🔗 Access Link</option>
-        <option value="instructions" {% if product.delivery_content_type == 'instructions' %}selected{% endif %}>📄 Instructions</option>
+        <option value="file" {% if product.delivery_content_type == 'file' %}selected{% endif %}>File</option>
+        <option value="license_key" {% if product.delivery_content_type == 'license_key' %}selected{% endif %}>License Key</option>
+        <option value="access_link" {% if product.delivery_content_type == 'access_link' %}selected{% endif %}>Access Link</option>
+        <option value="instructions" {% if product.delivery_content_type == 'instructions' %}selected{% endif %}>Instructions</option>
       </select>
     </div>
     {% endif %}
@@ -151,7 +152,7 @@
     var links = [];
     {% for f in product_files %}
     {% set dl_url = url_for('storefront.download_product', token=f.download_token, _external=True) if f.download_token else url_for('admin.admin_product_file_download', file_id=f.id, _external=True) %}
-    links.push('📎 {{ f.original_name }}: {{ dl_url }}');
+    links.push('{{ icon("clip") }} {{ f.original_name }}: {{ dl_url }}');
     {% endfor %}
     var msg = document.getElementById('deliveryMessageInput');
     msg.value = 'Here are your files:\\n\\n' + links.join('\\n');
@@ -188,7 +189,7 @@
 
 {% if order.status == 'cancelled' and order.refunded_amount and order.refunded_amount > 0 %}
 <div class="card-box" style="margin-top:1rem;border-left:3px solid #eab308;">
-  <h4>💸 Refund Recorded</h4>
+  <h4>{{ icon("money") }} Refund Recorded</h4>
   <p><strong>Amount:</strong> ₹{{ "{:,}".format(order.refunded_amount) }}</p>
   {% if order.refunded_at %}<p><strong>Refunded at:</strong> {{ order.refunded_at }}</p>{% endif %}
 </div>

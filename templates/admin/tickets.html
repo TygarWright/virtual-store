@@ -1,3 +1,4 @@
+{% from "admin/_icons.html" import icon %}
 {% extends "admin/base.html" %}
 {% block title %}Tickets{% endblock %}
 {% block content %}
@@ -31,7 +32,7 @@
         {% set reply_count = replies_map.get(ticket.id, [])|length %}
         <tr class="ticket-row" onclick="toggleTicketDetails({{ ticket.id }})">
           <td>{{ ticket.id }}</td>
-          <td><strong>{{ ticket.title }}</strong><br><small class="text-muted">{% if ticket.scope_type == 'global' %}🌐 Global{% elif ticket.scope_type == 'role' %}👥 {{ ticket.target_role|replace('_', ' ')|title }}{% elif ticket.scope_type == 'employee' %}👤 {{ ticket.target_username or 'Employee' }}{% else %}🔒 Private{% endif %}</small></td>
+          <td><strong>{{ ticket.title }}</strong><br><small class="text-muted">{% if ticket.scope_type == 'global' %}{{ icon('globe') }} Global{% elif ticket.scope_type == 'role' %}{{ icon('users') }} {{ ticket.target_role|replace('_', ' ')|title }}{% elif ticket.scope_type == 'employee' %}{{ icon('user') }} {{ ticket.target_username or 'Employee' }}{% else %}{{ icon('lock') }} Private{% endif %}</small></td>
           <td>
             <span class="ticket-category ticket-category--{{ ticket.category }}">
               {{ ticket.category|replace('_', ' ')|title }}
@@ -118,7 +119,7 @@
                   {% if reply.attachment_name and reply.attachment_path %}
                   <div class="ticket-reply__attachment">
                     <a href="{{ url_for('storefront.uploaded_file', filename=reply.attachment_path) }}" target="_blank" class="btn btn--sm btn--outline">
-                      📎 {{ reply.attachment_name }}
+                      {{ icon("clip") }} {{ reply.attachment_name }}
                     </a>
                   </div>
                   {% endif %}

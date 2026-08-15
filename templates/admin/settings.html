@@ -1,3 +1,4 @@
+{% from "admin/_icons.html" import icon %}
 {% extends "admin/base.html" %}
 {% block title %}Site Settings{% endblock %}
 {% block content %}
@@ -173,21 +174,21 @@
     <p class="help-text" style="margin-top:0; margin-bottom:1.25rem;">Edit the content of your legal pages below. Each textarea accepts HTML. The "Last updated" date appears at the bottom of every policy page.</p>
 
     <details style="margin-bottom:1rem; border:1px solid var(--grey-200); border-radius:8px; padding:0.75rem;">
-      <summary style="cursor:pointer; font-weight:600; margin-bottom:0.5rem;">📄 Refund Policy</summary>
+      <summary style="cursor:pointer; font-weight:600; margin-bottom:0.5rem;">{{ icon("document") }} Refund Policy</summary>
       <div class="field" style="margin-top:0.5rem;">
         <textarea name="refund_policy_text" style="min-height:300px; font-family:monospace; font-size:0.85rem;">{{ settings.refund_policy_text }}</textarea>
       </div>
     </details>
 
     <details style="margin-bottom:1rem; border:1px solid var(--grey-200); border-radius:8px; padding:0.75rem;">
-      <summary style="cursor:pointer; font-weight:600; margin-bottom:0.5rem;">🔒 Privacy Policy</summary>
+      <summary style="cursor:pointer; font-weight:600; margin-bottom:0.5rem;">{{ icon("lock") }} Privacy Policy</summary>
       <div class="field" style="margin-top:0.5rem;">
         <textarea name="privacy_policy_text" style="min-height:300px; font-family:monospace; font-size:0.85rem;">{{ settings.privacy_policy_text }}</textarea>
       </div>
     </details>
 
     <details style="margin-bottom:1rem; border:1px solid var(--grey-200); border-radius:8px; padding:0.75rem;">
-      <summary style="cursor:pointer; font-weight:600; margin-bottom:0.5rem;">⚖️ Terms of Service</summary>
+      <summary style="cursor:pointer; font-weight:600; margin-bottom:0.5rem;">{{ icon("scale") }} Terms of Service</summary>
       <div class="field" style="margin-top:0.5rem;">
         <textarea name="terms_of_service_text" style="min-height:300px; font-family:monospace; font-size:0.85rem;">{{ settings.terms_of_service_text }}</textarea>
       </div>
